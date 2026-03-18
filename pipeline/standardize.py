@@ -26,6 +26,10 @@ PDF_SHIFT_RE = re.compile(
 PDF_PAT_RE = re.compile(r"Patient ID:\s*(.*?)\s+Case ID:", re.IGNORECASE | re.DOTALL)
 PDF_CASE_RE = re.compile(r"Case ID:\s*(.*?)\s+Ward:", re.IGNORECASE | re.DOTALL)
 PDF_WARD_RE = re.compile(r"Ward:\s*(.*?)\s+Report", re.IGNORECASE | re.DOTALL)
+SQL_INSERT_RE = re.compile(
+    r"insert\s+into\s+([^\s(]+)\s*(?:\((.*?)\))?\s*values\s*(.*?);",
+    re.IGNORECASE | re.DOTALL,
+)
 
 
 TABLE_HINTS = {
@@ -351,6 +355,142 @@ def strip_trailing_empty(row: list[str]) -> list[str]:
     return out
 
 
+def clean_sql_identifier(name: str) -> str:
+    token = name.strip()
+    if not token:
+        return token
+    if token.startswith("[") and token.endswith("]"):
+        token = token[1:-1]
+    elif token.startswith("`") and token.endswith("`"):
+        token = token[1:-1]
+    elif token.startswith('"') and token.endswith('"'):
+        token = token[1:-1]
+    return token.strip()
+
+
+def clean_sql_table_name(name: str) -> str:
+    parts = [clean_sql_identifier(p) for p in name.split(".") if p.strip()]
+    if not parts:
+        return clean_sql_identifier(name)
+    return parts[-1]
+
+
+def split_sql_csv(segment: str) -> list[str]:
+    values: list[str] = []
+    buf: list[str] = []
+    in_single = False
+    in_double = False
+    depth = 0
+    i = 0
+    while i < len(segment):
+        ch = segment[i]
+        nxt = segment[i + 1] if i + 1 < len(segment) else ""
+        if ch == "'" and not in_double:
+            if in_single and nxt == "'":
+                buf.append("''")
+                i += 2
+                continue
+            in_single = not in_single
+            buf.append(ch)
+            i += 1
+            continue
+        if ch == '"' and not in_single:
+            in_double = not in_double
+            buf.append(ch)
+            i += 1
+            continue
+        if not in_single and not in_double:
+            if ch == "(":
+                depth += 1
+            elif ch == ")" and depth > 0:
+                depth -= 1
+            elif ch == "," and depth == 0:
+                values.append("".join(buf).strip())
+                buf = []
+                i += 1
+                continue
+        buf.append(ch)
+        i += 1
+    tail = "".join(buf).strip()
+    if tail:
+        values.append(tail)
+    return values
+
+
+def extract_sql_value_tuples(values_blob: str) -> list[str]:
+    tuples: list[str] = []
+    depth = 0
+    start = -1
+    in_single = False
+    in_double = False
+    i = 0
+    while i < len(values_blob):
+        ch = values_blob[i]
+        nxt = values_blob[i + 1] if i + 1 < len(values_blob) else ""
+        if ch == "'" and not in_double:
+            if in_single and nxt == "'":
+                i += 2
+                continue
+            in_single = not in_single
+            i += 1
+            continue
+        if ch == '"' and not in_single:
+            in_double = not in_double
+            i += 1
+            continue
+        if not in_single and not in_double:
+            if ch == "(":
+                if depth == 0:
+                    start = i + 1
+                depth += 1
+            elif ch == ")" and depth > 0:
+                depth -= 1
+                if depth == 0 and start >= 0:
+                    tuples.append(values_blob[start:i])
+                    start = -1
+        i += 1
+    return tuples
+
+
+def parse_sql_literal(raw: str) -> str:
+    token = raw.strip()
+    if not token:
+        return ""
+    up = token.upper()
+    if up == "NULL" or up == "DEFAULT":
+        return ""
+    if token[:2].lower() == "n'" and token.endswith("'"):
+        token = token[1:]
+    if token.startswith("'") and token.endswith("'") and len(token) >= 2:
+        return token[1:-1].replace("''", "'").strip()
+    if token.startswith('"') and token.endswith('"') and len(token) >= 2:
+        return token[1:-1].replace('""', '"').strip()
+    return token.strip()
+
+
+def parse_sql_insert_statements(text: str) -> list[dict[str, Any]]:
+    statements: list[dict[str, Any]] = []
+    for match in SQL_INSERT_RE.finditer(text):
+        raw_table = match.group(1) or ""
+        raw_columns = match.group(2) or ""
+        raw_values = match.group(3) or ""
+        table_name = clean_sql_table_name(raw_table)
+        columns = [clean_sql_identifier(c) for c in split_sql_csv(raw_columns)] if raw_columns else []
+        tuple_blobs = extract_sql_value_tuples(raw_values)
+        rows: list[list[str]] = []
+        for blob in tuple_blobs:
+            values = [parse_sql_literal(v) for v in split_sql_csv(blob)]
+            rows.append(values)
+        statements.append(
+            {
+                "table_name": table_name,
+                "columns": columns,
+                "rows": rows,
+            }
+        )
+    return statements
+
+
 def rows_to_records(
     rows: list[list[str]], table: str, profile: dict[str, Any]
 ) -> tuple[list[str], list[dict[str, Any]], dict[str, Any]]:
@@ -504,16 +644,98 @@ def load_pdf_records(path: Path, table: str) -> tuple[list[str], list[dict[str, 
         return rows_to_records(text_rows, table, profile)
 
 
+def load_sql_records(path: Path, table: str) -> tuple[list[str], list[dict[str, Any]], dict[str, Any]]:
+    enc, _ = sniff_text_file(path)
+    text = path.read_text(encoding=enc)
+    statements = parse_sql_insert_statements(text)
+    profile: dict[str, Any] = {
+        "format": "sql",
+        "encoding": enc,
+        "insert_statements": len(statements),
+    }
+    if not statements:
+        return [], [], profile
+
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for stmt in statements:
+        name = stmt["table_name"] or "unknown"
+        grouped.setdefault(name, []).append(stmt)
+
+    best_table = max(grouped.keys(), key=lambda t: sum(len(s["rows"]) for s in grouped[t]))
+    selected = grouped[best_table]
+    profile["sql_table"] = best_table
+    profile["sql_tables_found"] = sorted(grouped.keys())
+
+    headers: list[str] = []
+    max_len_without_cols = 0
+    for stmt in selected:
+        cols = stmt["columns"]
+        if cols:
+            for col in cols:
+                if col and col not in headers:
+                    headers.append(col)
+        else:
+            for row in stmt["rows"]:
+                if len(row) > max_len_without_cols:
+                    max_len_without_cols = len(row)
+
+    if not headers:
+        headers = [f"col_{i+1}" for i in range(max_len_without_cols)]
+
+    data_rows: list[list[str]] = []
+    for stmt in selected:
+        cols = stmt["columns"]
+        for row in stmt["rows"]:
+            out = [""] * len(headers)
+            if cols:
+                for idx, col in enumerate(cols):
+                    if idx >= len(row):
+                        continue
+                    if col not in headers:
+                        continue
+                    out[headers.index(col)] = row[idx]
+            else:
+                for idx, val in enumerate(row[: len(headers)]):
+                    out[idx] = val
+            data_rows.append(out)
+
+    return rows_to_records([headers] + data_rows, table, profile)
+
+
 def load_records(path: Path, table: str) -> tuple[list[str], list[dict[str, Any]], dict[str, Any]]:
     if path.suffix.lower() == ".xlsx":
         return load_xlsx_records(path, table)
     if path.suffix.lower() == ".pdf":
         return load_pdf_records(path, table)
+    if path.suffix.lower() == ".sql":
+        return load_sql_records(path, table)
     return load_csv_records(path, table)
 
 
-def detect_table(path: Path, headers: list[str]) -> str | None:
+def detect_table(
+    path: Path, headers: list[str], profile: dict[str, Any] | None = None
+) -> str | None:
     name = path.name.lower()
+    if profile and profile.get("sql_table"):
+        sql_name = normalize(str(profile["sql_table"]))
+        target_by_norm = {normalize(t): t for t in TABLE_HINTS}
+        if sql_name in target_by_norm:
+            return target_by_norm[sql_name]
+        if "1hz" in sql_name:
+            return "tbImportDevice1HzMotionData"
+        if "device" in sql_name:
+            return "tbImportDeviceMotionData"
+        if "labs" in sql_name or "lab" in sql_name:
+            return "tbImportLabsData"
+        if "icd" in sql_name or "ops" in sql_name:
+            return "tbImportIcd10Data"
+        if "med" in sql_name:
+            return "tbImportMedicationInpatientData"
+        if "nursing" in sql_name or "report" in sql_name:
+            return "tbImportNursingDailyReportsData"
+        if "acdata" in sql_name or "epaac" in sql_name:
+            return "tbImportAcData"
+
     if "1hz" in name:
         return "tbImportDevice1HzMotionData"
     if "device" in name:
@@ -694,12 +916,16 @@ def main() -> None:
         prompt_template = args.prompt_template.read_text(encoding="utf-8")
 
     files = sorted(
-        [p for p in in_dir.rglob("*") if p.suffix.lower() in {".csv", ".xlsx", ".pdf"}]
+        [
+            p
+            for p in in_dir.rglob("*")
+            if p.suffix.lower() in {".csv", ".xlsx", ".pdf", ".sql"}
+        ]
     )
     for path in files:
         try:
-            headers_probe, _, _ = load_records(path, "tbImportAcData")
-            table = detect_table(path, headers_probe)
+            headers_probe, _, profile_probe = load_records(path, "tbImportAcData")
+            table = detect_table(path, headers_probe, profile_probe)
             if not table or table not in schema:
                 report.append(
                     {

@@ -19,7 +19,7 @@ def run_python(script: Path, args: list[str]) -> int:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Healthcare data standardization pipeline (CSV/XLSX/PDF -> SQL target schema)."
+        description="Healthcare data standardization pipeline (CSV/XLSX/PDF/SQL -> SQL target schema)."
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 

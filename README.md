@@ -48,6 +48,13 @@ python pipeline.py standardize \
   --model llama3.2:latest
 ```
 
+Supported input formats for `--input-dir`:
+
+- `.csv`
+- `.xlsx`
+- `.pdf`
+- `.sql` (SQL dump files with `INSERT INTO ... VALUES ...`)
+
 Run evaluation:
 
 ```bash
