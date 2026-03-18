@@ -1,67 +1,116 @@
 from __future__ import annotations
 
 import argparse
-import os
-
-from crewai import Agent, Crew, Task
-from crewai_tools import CodeInterpreterTool
-from langchain_community.llms import Ollama
+import subprocess
+import sys
+from pathlib import Path
 
 
-def build_llm(model: str) -> Ollama:
-    """
-    Build an Ollama LLM client.
-
-    In Docker, point this at your host Ollama with:
-      -e OLLAMA_BASE_URL=http://host.docker.internal:11434
-    """
-
-    base_url = os.getenv("OLLAMA_BASE_URL")
-    if base_url:
-        return Ollama(model=model, base_url=base_url)
-    return Ollama(model=model)
+REPO_ROOT = Path(__file__).resolve().parent
+PIPELINE_DIR = REPO_ROOT / "pipeline"
+DB_SQL = REPO_ROOT / "database" / "sqlserver" / "CreateImportTables.sql"
 
 
-def run_fib_task(model: str = "llama3.1") -> str:
-    """
-    Example CrewAI task: generate fib(10) and write to fib.txt.
-    Returns the Crew output.
-    """
-
-    local_llm = build_llm(model)
-
-    coder_agent = Agent(
-        role="Senior Python Developer",
-        goal="Write and execute Python code to solve tasks",
-        backstory=(
-            "You are an expert coder. You use your Code Interpreter tool to run scripts "
-            "and verify results."
-        ),
-        tools=[CodeInterpreterTool()],
-        llm=local_llm,
-        allow_code_execution=True,
-    )
-
-    task = Task(
-        description=(
-            "Calculate the first 10 numbers of the Fibonacci sequence and save them "
-            "to a file named fib.txt"
-        ),
-        expected_output="A file named fib.txt containing the sequence.",
-        agent=coder_agent,
-    )
-
-    crew = Crew(agents=[coder_agent], tasks=[task])
-    return str(crew.kickoff())
+def run_python(script: Path, args: list[str]) -> int:
+    cmd = [sys.executable, str(script), *args]
+    proc = subprocess.run(cmd, cwd=REPO_ROOT)
+    return proc.returncode
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Start Hack pipeline (Docker-friendly CLI)")
-    parser.add_argument("--model", default="llama3.1", help="Ollama model name (default: llama3.1)")
+    parser = argparse.ArgumentParser(
+        description="Healthcare data standardization pipeline (CSV/XLSX/PDF -> SQL target schema)."
+    )
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    schema_cmd = subparsers.add_parser("schema", help="Extract DB schema report from SQL.")
+    schema_cmd.add_argument("--out-json", default="pipeline/out/db_schema.json")
+    schema_cmd.add_argument("--out-md", default="pipeline/out/db_schema.md")
+
+    standardize_cmd = subparsers.add_parser(
+        "standardize", help="Standardize an input folder to target-table CSVs."
+    )
+    standardize_cmd.add_argument("--input-dir", required=True)
+    standardize_cmd.add_argument("--output-dir", required=True)
+    standardize_cmd.add_argument("--model", default="llama3.2:latest")
+    standardize_cmd.add_argument("--llm-timeout", type=int, default=45)
+    standardize_cmd.add_argument(
+        "--prompt-template",
+        default="pipeline/prompts/column_mapper_prompt.txt",
+    )
+    standardize_cmd.add_argument("--no-llm", action="store_true")
+
+    eval_cmd = subparsers.add_parser("eval", help="Evaluate against a benchmark manifest.")
+    eval_cmd.add_argument("--manifest", required=True)
+    eval_cmd.add_argument("--out-json", required=True)
+    eval_cmd.add_argument("--out-md")
+    eval_cmd.add_argument("--model", default="llama3.2:latest")
+    eval_cmd.add_argument("--llm-timeout", type=int, default=45)
+    eval_cmd.add_argument(
+        "--prompt-template",
+        default="pipeline/prompts/column_mapper_prompt.txt",
+    )
+    eval_cmd.add_argument("--no-llm", action="store_true")
+
     args = parser.parse_args()
 
-    out = run_fib_task(model=args.model)
-    print(out)
+    if args.command == "schema":
+        rc = run_python(
+            PIPELINE_DIR / "schema_report.py",
+            [
+                "--sql",
+                str(DB_SQL),
+                "--out-json",
+                str(REPO_ROOT / args.out_json),
+                "--out-md",
+                str(REPO_ROOT / args.out_md),
+            ],
+        )
+        raise SystemExit(rc)
+
+    if args.command == "standardize":
+        cmd_args = [
+            "--schema-sql",
+            str(DB_SQL),
+            "--input-dir",
+            str(REPO_ROOT / args.input_dir),
+            "--output-dir",
+            str(REPO_ROOT / args.output_dir),
+            "--model",
+            args.model,
+            "--llm-timeout",
+            str(args.llm_timeout),
+        ]
+        if args.prompt_template:
+            cmd_args.extend(["--prompt-template", str(REPO_ROOT / args.prompt_template)])
+        if args.no_llm:
+            cmd_args.append("--no-llm")
+        rc = run_python(PIPELINE_DIR / "standardize.py", cmd_args)
+        raise SystemExit(rc)
+
+    if args.command == "eval":
+        cmd_args = [
+            "--schema-sql",
+            str(DB_SQL),
+            "--repo-root",
+            str(REPO_ROOT),
+            "--manifest",
+            str(REPO_ROOT / args.manifest),
+            "--out-json",
+            str(REPO_ROOT / args.out_json),
+            "--model",
+            args.model,
+            "--llm-timeout",
+            str(args.llm_timeout),
+        ]
+        if args.out_md:
+            cmd_args.extend(["--out-md", str(REPO_ROOT / args.out_md)])
+        if args.prompt_template:
+            cmd_args.extend(["--prompt-template", str(REPO_ROOT / args.prompt_template)])
+        if args.no_llm:
+            cmd_args.append("--no-llm")
+        rc = run_python(PIPELINE_DIR / "eval.py", cmd_args)
+        raise SystemExit(rc)
 
 
 if __name__ == "__main__":

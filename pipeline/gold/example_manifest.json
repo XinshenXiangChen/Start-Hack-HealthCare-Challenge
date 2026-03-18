@@ -1,0 +1,16 @@
+{
+  "cases": [
+    {
+      "id": "labs_csv_case",
+      "input_file": "Endtestdaten_mit_Fehlern_ einheitliche ID/synth_labs.csv",
+      "expected_table": "tbImportLabsData",
+      "expected_mapping_file": "pipeline/gold/examples/synth_labs.mapping.json",
+      "expected_output_file": "pipeline/gold/examples/synth_labs.expected.csv"
+    },
+    {
+      "id": "nursing_pdf_case",
+      "input_file": "Endtestdaten_ohne_Fehler_ einheitliche ID/split_data_pat_case_altered/split_data_pat_case_altered/clinic_4_nursing.pdf",
+      "expected_table": "tbImportNursingDailyReportsData"
+    }
+  ]
+}
