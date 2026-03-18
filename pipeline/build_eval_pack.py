@@ -52,6 +52,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--schema-sql", required=True, type=Path)
     parser.add_argument("--repo-root", default=Path.cwd(), type=Path)
+    parser.add_argument("--data-root", type=Path)
     parser.add_argument("--size", default=50, type=int)
     parser.add_argument("--max-expected-rows", default=5, type=int)
     parser.add_argument("--output-dir", required=True, type=Path)
@@ -71,6 +72,7 @@ def main() -> None:
 
     repo_root = args.repo_root.resolve()
     output_dir = args.output_dir.resolve()
+    data_root = args.data_root.resolve() if args.data_root else repo_root
     expected_dir = output_dir / "expected_outputs"
     mapping_dir = output_dir / "expected_mappings"
     prompt_template = args.prompt_template.read_text(encoding="utf-8") if args.prompt_template else None
@@ -79,7 +81,7 @@ def main() -> None:
     groups: dict[str, list[Path]] = defaultdict(list)
 
     for d in args.input_dirs:
-        base = (repo_root / d).resolve()
+        base = (data_root / d).resolve()
         for p in sorted(base.rglob("*")):
             if p.suffix.lower() not in {".csv", ".xlsx", ".pdf"}:
                 continue
@@ -122,7 +124,7 @@ def main() -> None:
         cases.append(
             {
                 "id": case_id,
-                "input_file": to_rel(file_path, repo_root),
+                "input_file": str(file_path.resolve().relative_to(data_root)),
                 "expected_table": table,
                 "expected_mapping_file": to_rel(mapping_path, repo_root),
                 "expected_output_file": to_rel(output_path, repo_root),
@@ -134,6 +136,7 @@ def main() -> None:
             "kind": "silver_eval_pack",
             "generated_at_utc": datetime.now(timezone.utc).isoformat(),
             "repo_root": str(repo_root),
+            "data_root": str(data_root),
             "size": len(cases),
             "max_expected_rows": args.max_expected_rows,
             "llm_used_for_expectations": not args.no_llm,

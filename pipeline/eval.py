@@ -271,6 +271,7 @@ def main() -> None:
     parser.add_argument("--schema-sql", required=True, type=Path)
     parser.add_argument("--manifest", required=True, type=Path)
     parser.add_argument("--repo-root", default=Path.cwd(), type=Path)
+    parser.add_argument("--data-root", type=Path)
     parser.add_argument("--model", default="llama3.2:latest")
     parser.add_argument("--llm-timeout", default=45, type=int)
     parser.add_argument("--prompt-template", type=Path)
@@ -281,6 +282,7 @@ def main() -> None:
     args = parser.parse_args()
 
     repo_root = args.repo_root.resolve()
+    data_root = args.data_root.resolve() if args.data_root else repo_root
     manifest_path = args.manifest.resolve()
     manifest_dir = manifest_path.parent
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -295,7 +297,7 @@ def main() -> None:
     case_results: list[dict[str, Any]] = []
     for idx, case in enumerate(manifest["cases"], start=1):
         case_id = str(case.get("id") or f"case_{idx}")
-        input_file = resolve_path(str(case["input_file"]), manifest_dir, repo_root)
+        input_file = resolve_path(str(case["input_file"]), manifest_dir, data_root)
         expected_table = case.get("expected_table")
         result: dict[str, Any] = {
             "id": case_id,

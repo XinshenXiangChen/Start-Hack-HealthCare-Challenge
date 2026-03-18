@@ -28,3 +28,7 @@ LLM fallback prompt template:
 
 - `gold/example_manifest.json`
 - `gold/examples/*.json|*.csv`
+
+## Notes
+
+- `build_manual_gold15.py`, `build_eval_pack.py`, and `eval.py` support `--data-root` so benchmarks can run against datasets stored outside this repository.

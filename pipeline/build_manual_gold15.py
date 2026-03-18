@@ -44,11 +44,13 @@ def build_rows(
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--repo-root", default=Path.cwd(), type=Path)
+    parser.add_argument("--data-root", type=Path)
     parser.add_argument("--output-dir", required=True, type=Path)
     parser.add_argument("--max-rows", default=3, type=int)
     args = parser.parse_args()
 
     root = args.repo_root.resolve()
+    data_root = args.data_root.resolve() if args.data_root else root
     out_dir = args.output_dir.resolve()
     exp_map_dir = out_dir / "expected_mappings"
     exp_out_dir = out_dir / "expected_outputs"
@@ -364,7 +366,7 @@ def main() -> None:
 
     manifest_cases: list[dict[str, Any]] = []
     for case in cases:
-        input_path = root / case["input_file"]
+        input_path = data_root / case["input_file"]
         table = case["expected_table"]
         headers, records, _ = std.load_records(input_path, table)
 
