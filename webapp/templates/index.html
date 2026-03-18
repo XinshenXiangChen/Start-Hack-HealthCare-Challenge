@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Evaluation Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
+  </head>
+  <body>
+    <div class="css-root"></div>
+    <div class="container">
+      <div class="header">
+        <div class="brand">
+          <h1>Evaluation Dashboard</h1>
+          <div class="sub">Run the standardization evaluator and inspect nulls, mismatches, and type issues per case.</div>
+        </div>
+        <div>
+          {% if latest_run_id %}
+            <span class="pill">
+              Latest run:
+              <a href="{{ url_for('run_details', run_id=latest_run_id) }}" style="margin-left: 8px;">{{ latest_run_id }}</a>
+            </span>
+          {% else %}
+            <span class="pill">No runs yet.</span>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="grid two">
+        <div class="card">
+          <h2>Run Evaluation</h2>
+          <form method="post" action="{{ url_for('run') }}">
+            <label for="manifest">Manifest</label>
+            <select id="manifest" name="manifest" required>
+              {% for m in manifests %}
+                <option value="{{ m.value }}">{{ m.label }}</option>
+              {% endfor %}
+            </select>
+
+            <label for="data_root">Data Root (optional)</label>
+            <input id="data_root" name="data_root" placeholder="e.g. D:/epaCC-START-Hack-2026" />
+
+            <label for="model">Model (Ollama model name)</label>
+            <input id="model" name="model" value="llama3.2:latest" />
+
+            <label for="llm_timeout">LLM Timeout (seconds)</label>
+            <input id="llm_timeout" name="llm_timeout" value="45" />
+
+            <div class="row">
+              <label style="margin-top: 0;">
+                <input type="checkbox" name="no_llm" />
+                <span style="margin-left: 8px;">Disable LLM (rule-based mapping only)</span>
+              </label>
+            </div>
+
+            <button type="submit">Run Evaluation</button>
+          </form>
+          <div class="muted" style="margin-top: 12px;">
+            Tip: if the manifest’s `input_file` paths aren’t found, set <b>Data Root</b> to the folder that contains the dataset files.
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>What You’ll See</h2>
+          <div class="muted" style="line-height: 1.6;">
+            For each case, the UI highlights:
+            <br />- required column null/missing fill rate
+            <br />- type mismatches (examples)
+            <br />- mapping mismatches (precision/recall/F1 + keys)
+            <br />- output cell mismatches (samples)
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
+
