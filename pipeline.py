@@ -4,11 +4,58 @@ import argparse
 import subprocess
 import sys
 from pathlib import Path
+from typing import Optional
+
+
+def _sanitize_dotenv() -> None:
+    """
+    python-dotenv defaults to finding a `.env` in the current working directory
+    and parent folders. If that file exists but is UTF-16, decoding can crash.
+    We rewrite any discovered `.env` to UTF-8 (best-effort) before other code runs.
+    """
+    try:
+        from dotenv import find_dotenv  # type: ignore
+    except Exception:
+        return
+
+    dotenv_path_str: Optional[str] = None
+    try:
+        dotenv_path_str = find_dotenv()
+    except Exception:
+        dotenv_path_str = None
+
+    if not dotenv_path_str:
+        return
+
+    dotenv_path = Path(dotenv_path_str)
+    if not dotenv_path.exists():
+        return
+
+    try:
+        raw = dotenv_path.read_bytes()
+        if raw.startswith(b"\xff\xfe") or raw.startswith(b"\xfe\xff"):
+            text = raw.decode("utf-16")
+        else:
+            for enc in ("utf-8-sig", "utf-8", "cp1252", "latin1"):
+                try:
+                    text = raw.decode(enc)
+                    break
+                except UnicodeDecodeError:
+                    continue
+            else:
+                text = raw.decode("utf-8", errors="replace")
+
+        dotenv_path.write_text(text, encoding="utf-8")
+    except Exception:
+        # Never block pipeline execution due to dotenv issues.
+        return
 
 
 REPO_ROOT = Path(__file__).resolve().parent
 PIPELINE_DIR = REPO_ROOT / "pipeline"
 DB_SQL = REPO_ROOT / "database" / "sqlserver" / "CreateImportTables.sql"
+
+_sanitize_dotenv()
 
 
 def run_python(script: Path, args: list[str]) -> int:
@@ -44,6 +91,7 @@ def main() -> None:
     eval_cmd.add_argument("--manifest", required=True)
     eval_cmd.add_argument("--out-json", required=True)
     eval_cmd.add_argument("--out-md")
+    eval_cmd.add_argument("--data-root", default=None, help="Base folder for manifest input_file resolution")
     eval_cmd.add_argument("--model", default="llama3.2:latest")
     eval_cmd.add_argument("--llm-timeout", type=int, default=45)
     eval_cmd.add_argument(
@@ -103,6 +151,8 @@ def main() -> None:
             "--llm-timeout",
             str(args.llm_timeout),
         ]
+        if args.data_root:
+            cmd_args.extend(["--data-root", str(REPO_ROOT / args.data_root)])
         if args.out_md:
             cmd_args.extend(["--out-md", str(REPO_ROOT / args.out_md)])
         if args.prompt_template:

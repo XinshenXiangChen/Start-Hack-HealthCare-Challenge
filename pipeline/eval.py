@@ -94,6 +94,11 @@ def eval_mapping_metrics(
     fp = 0
     fn = 0
     exact = 0
+    tp_keys: list[str] = []
+    fp_keys: list[str] = []
+    fn_keys: list[str] = []
+    exact_keys: list[str] = []
+    gold_pred_by_key: dict[str, dict[str, str | None]] = {}
 
     for src in sources:
         gold = expected.get(src)
@@ -101,19 +106,29 @@ def eval_mapping_metrics(
         gold_non = gold not in (None, "")
         pred_non = pred not in (None, "")
 
-        if (gold or None) == (pred or None):
+        gold_norm = gold or None
+        pred_norm = pred or None
+        gold_pred_by_key[src] = {"gold": gold_norm, "pred": pred_norm}
+
+        if (gold_norm) == (pred_norm):
             exact += 1
+            exact_keys.append(src)
 
         if gold_non and pred_non:
             if gold == pred:
                 tp += 1
+                tp_keys.append(src)
             else:
                 fp += 1
                 fn += 1
+                fp_keys.append(src)
+                fn_keys.append(src)
         elif gold_non and not pred_non:
             fn += 1
+            fn_keys.append(src)
         elif not gold_non and pred_non:
             fp += 1
+            fp_keys.append(src)
 
     precision = safe_ratio(tp, tp + fp)
     recall = safe_ratio(tp, tp + fn)
@@ -126,6 +141,11 @@ def eval_mapping_metrics(
         "mapping_tp": tp,
         "mapping_fp": fp,
         "mapping_fn": fn,
+        "mapping_tp_keys": tp_keys,
+        "mapping_fp_keys": fp_keys,
+        "mapping_fn_keys": fn_keys,
+        "mapping_exact_keys": exact_keys,
+        "mapping_gold_pred_by_key": gold_pred_by_key,
     }
 
 
@@ -167,21 +187,40 @@ def eval_schema_quality(
     required = [c["name"] for c in cols if not c["nullable"]]
     type_checked = 0
     type_valid = 0
+    type_invalid_examples: list[dict[str, Any]] = []
+    max_invalid_examples = 25
     req_total = len(rows) * len(required)
     req_present = 0
+    # required_missing_by_column counts missing (empty) required values.
+    required_missing_by_column: dict[str, dict[str, int]] = {
+        c: {"present": 0, "missing": 0, "total": len(rows)} for c in required
+    }
 
-    for row in rows:
+    for row_idx, row in enumerate(rows):
         for col in cols:
             name = col["name"]
             value = to_norm(row.get(name, ""))
             if value == "":
                 continue
             type_checked += 1
-            if value_matches_type(str(col["type"]), value):
+            sql_type = str(col["type"])
+            if value_matches_type(sql_type, value):
                 type_valid += 1
+            elif len(type_invalid_examples) < max_invalid_examples:
+                type_invalid_examples.append(
+                    {
+                        "row_index": row_idx,
+                        "column": name,
+                        "sql_type": sql_type,
+                        "value": value,
+                    }
+                )
         for req_col in required:
             if to_norm(row.get(req_col, "")) != "":
                 req_present += 1
+                required_missing_by_column[req_col]["present"] += 1
+            else:
+                required_missing_by_column[req_col]["missing"] += 1
 
     return {
         "type_checked_values": type_checked,
@@ -190,6 +229,8 @@ def eval_schema_quality(
         "required_columns": required,
         "required_fill_rate": safe_ratio(req_present, req_total),
         "required_missing_values": req_total - req_present,
+        "required_missing_by_column": required_missing_by_column,
+        "type_invalid_examples": type_invalid_examples,
     }
 
 
@@ -202,6 +243,8 @@ def eval_output_metrics(
     total_cells = exp_len * len(cols)
     correct_cells = 0
     exact_rows = 0
+    cell_mismatch_samples: list[dict[str, Any]] = []
+    max_mismatch_samples = 40
 
     for i in range(exp_len):
         pred = predicted_rows[i] if i < pred_len else None
@@ -214,6 +257,15 @@ def eval_output_metrics(
                 correct_cells += 1
             else:
                 row_ok = False
+                if len(cell_mismatch_samples) < max_mismatch_samples:
+                    cell_mismatch_samples.append(
+                        {
+                            "row_index": i,
+                            "column": col,
+                            "expected": e,
+                            "predicted": p,
+                        }
+                    )
         if row_ok:
             exact_rows += 1
 
@@ -225,6 +277,7 @@ def eval_output_metrics(
         "row_count_match": exp_len == pred_len,
         "row_exact_rate": safe_ratio(exact_rows, exp_len),
         "cell_accuracy": safe_ratio(correct_cells, total_cells),
+        "cell_mismatch_samples": cell_mismatch_samples,
     }
 
 
