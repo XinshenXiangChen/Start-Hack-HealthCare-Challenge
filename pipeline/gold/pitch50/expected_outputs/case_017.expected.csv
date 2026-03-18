@@ -1,0 +1,4 @@
+﻿coCaseId,coTimestamp,coPatient_id,coMovement_index_0_100,coMicro_movements_count,coBed_exit_detected_0_1,coFall_event_0_1,coImpact_magnitude_g,coPost_fall_immobility_minutes
+,2026-01-01 00:00:00,ID_0001,27.6,19,0,0,,
+,2026-01-01 01:00:00,ID_0001,46.5,8,0,0,,
+,2026-01-01 02:00:00,ID_0001,28.6,12,0,0,,

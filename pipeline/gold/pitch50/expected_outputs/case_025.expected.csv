@@ -1,0 +1,4 @@
+﻿coCaseId,coWard,coAdmission_date,coDischarge_date,coLength_of_stay_days,coPrimary_icd10_code,coPrimary_icd10_description_en,coSecondary_icd10_codes,cpSecondary_icd10_descriptions_en,coOps_codes,ops_descriptions_en
+CASE-000001,Pneumologie,2026-02-10,,,N17.9; R54,"Acute kidney failure, unspecified; Age-related physical debility",J44.1,Chronic obstructive pulmonary disease with acute exacerbation,8-98f.0,Pulmonology complex treatment
+CASE-000002,Geriatrie,2026-02-08,,,R54; Z74.1,Age-related physical debility; Need for assistance with personal care,I50.1,Left ventricular failure,8-550.1,Early geriatric complex treatment
+CASE-000003,Innere Medizin,2026-02-19,,,D64.9; Z74.1,"Anaemia, unspecified; Need for assistance with personal care",J18.9,"Pneumonia, unspecified organism",8-800.c0,Intravenous medication administration

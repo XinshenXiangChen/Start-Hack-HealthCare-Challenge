@@ -1,0 +1,4 @@
+﻿coCaseId,coPatient_id,coWard,coReport_date,coShift,coNursing_note_free_text
+CASE-5655,PAT_0056,Geriatrics,14-Aug-2025,Early shift,FrÃ¼hschicht: stable condition. MaÃŸnahmen: medication administered. Bewertung: physician notified.
+CASE-2996,PAT_0060,Neurology,Oct 20 2025,Early shift,Shift note: disoriented. IV line flushed performed. Nursing assessment: no complications.
+CASE-5129,PAT_0044,Geriatrics,2026-Feb-02,Early shift,Shift note: reduzierter AZ. mobilized to corridor performed. Nursing assessment: family informed.

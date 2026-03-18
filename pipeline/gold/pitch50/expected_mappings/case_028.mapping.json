@@ -1,0 +1,8 @@
+{
+  "DAT": "coReport_date",
+  "CAS": "coCaseId",
+  "PAT": "coPatient_id",
+  "WAR": "coWard",
+  "SHF": "coShift",
+  "TXT": "coNursing_note_free_text"
+}

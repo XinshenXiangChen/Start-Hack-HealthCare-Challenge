@@ -1,0 +1,4 @@
+﻿coCaseId,coPatient_id,coRecord_type,coEncounter_id,coWard,coAdmission_datetime,coDischarge_datetime,coOrder_id,coOrder_uuid,coMedication_code_atc,coMedication_name,coRoute,coDose,coDose_unit,coFrequency,coOrder_start_datetime,coOrder_stop_datetime,coIs_prn_0_1,coIndication,prescriber_role,order_status,administration_datetime,administered_dose,administered_unit,administration_status,note
+,,,,Pneumologie,,,,,,,,,,,,,,,,active,,,,,
+,,,,Pneumologie,,,,,,,,,,,,,,,,active,,,,,
+,,,,Pneumologie,,,,,,,,,,,,,,,,active,,,,,

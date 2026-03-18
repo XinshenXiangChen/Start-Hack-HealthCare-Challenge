@@ -1,0 +1,4 @@
+﻿coCaseId,coTimestamp,coPatient_id,coDevice_id,coBed_occupied_0_1,coMovement_score_0_100,coAccel_x_m_s2,coAccel_y_m_s2,coAccel_z_m_s2,coAccel_magnitude_g,coPressure_zone1_0_100,coPressure_zone2_0_100,coPressure_zone3_0_100,coPressure_zone4_0_100,coBed_exit_event_0_1,coBed_return_event_0_1,coFall_event_0_1,coImpact_magnitude_g,coEvent_id
+,2026-02-01 00:00:00,0002,MAT-4099,,,-0.115,0.087,9.886,1.008,,,,,0,0,0,,
+,2026-02-01 00:00:01,0002,MAT-4099,,,-0.072,-0.013,10.024,1.022,,,,,0,0,0,,
+,2026-02-01 00:00:02,0002,MAT-4099,,,0.049,-0.167,9.987,1.018,,,,,0,0,0,,

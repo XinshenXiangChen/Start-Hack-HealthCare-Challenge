@@ -1,0 +1,12 @@
+{
+  "id_pat": "coPatient_id",
+  "id_dev": "coDevice_id",
+  "date": "coTimestamp",
+  "accx": "coAccel_x_m_s2",
+  "accy": "coAccel_y_m_s2",
+  "accz": "coAccel_z_m_s2",
+  "acc_mag": "coAccel_magnitude_g",
+  "exit": "coBed_exit_event_0_1",
+  "return": "coBed_return_event_0_1",
+  "fall": "coFall_event_0_1"
+}

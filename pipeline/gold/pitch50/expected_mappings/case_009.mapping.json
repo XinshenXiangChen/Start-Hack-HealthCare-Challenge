@@ -1,0 +1,20 @@
+{
+  "PatientID": "coPatient_id",
+  "DeviceID": "coDevice_id",
+  "Timestamp": "coTimestamp",
+  "BedOccupied": "coBed_occupied_0_1",
+  "MovementScore": "coMovement_score_0_100",
+  "AccelX": "coAccel_x_m_s2",
+  "AccelY": "coAccel_y_m_s2",
+  "AccelZ": "coAccel_z_m_s2",
+  "AccelMag": "coAccel_magnitude_g",
+  "PressZ1": "coPressure_zone1_0_100",
+  "PressZ2": "coPressure_zone2_0_100",
+  "PressZ3": "coPressure_zone3_0_100",
+  "PressZ4": "coPressure_zone4_0_100",
+  "BedExit": "coBed_exit_event_0_1",
+  "BedReturn": "coBed_return_event_0_1",
+  "FallEvent": "coFall_event_0_1",
+  "ImpactMag": "coImpact_magnitude_g",
+  "EventID": "coEvent_id"
+}

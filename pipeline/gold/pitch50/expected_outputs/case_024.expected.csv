@@ -1,0 +1,4 @@
+﻿coCaseId,coTimestamp,coPatient_id,coMovement_index_0_100,coMicro_movements_count,coBed_exit_detected_0_1,coFall_event_0_1,coImpact_magnitude_g,coPost_fall_immobility_minutes
+,2026-01-01 00:00:00,PAT-0071,59.2,8,0,1,5.83,35.0
+,2026-01-01 01:00:00,PAT-0071,72.3,11,0,1,5.19,4.0
+,2026-01-01 02:00:00,PAT-0071,46.5,15,0,0,,

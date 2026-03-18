@@ -1,0 +1,364 @@
+{
+  "meta": {
+    "kind": "silver_eval_pack",
+    "generated_at_utc": "2026-03-18T21:52:01.347273+00:00",
+    "repo_root": "/Users/vicentegallardo/Desktop/_StartHack/Start-Hack-HealthCare-Challenge",
+    "data_root": "/Users/vicentegallardo/Desktop/_StartHack/epaCC-START-Hack-2026",
+    "size": 50,
+    "max_expected_rows": 3,
+    "llm_used_for_expectations": false,
+    "note": "Auto-generated expectations from current pipeline version; use as benchmark bootstrap, not final human-labeled gold."
+  },
+  "cases": [
+    {
+      "id": "case_001",
+      "input_file": "Endtestdaten_mit_Fehlern_ einheitliche ID/epaAC-Data-3.csv",
+      "expected_table": "tbImportAcData",
+      "expected_mapping_file": "pipeline/gold/pitch50/expected_mappings/case_001.mapping.json",
+      "expected_output_file": "pipeline/gold/pitch50/expected_outputs/case_001.expected.csv"
+    },
+    {
+      "id": "case_002",
+      "input_file": "Endtestdaten_mit_Fehlern_ einheitliche ID/synth_device_raw_1hz_motion_fall.csv",
+      "expected_table": "tbImportDevice1HzMotionData",
+      "expected_mapping_file": "pipeline/gold/pitch50/expected_mappings/case_002.mapping.json",
+      "expected_output_file": "pipeline/gold/pitch50/expected_outputs/case_002.expected.csv"
+    },
+    {
+      "id": "case_003",
+      "input_file": "Endtestdaten_mit_Fehlern_ einheitliche ID/synth_device_motion_fall.csv",
+      "expected_table": "tbImportDeviceMotionData",
+      "expected_mapping_file": "pipeline/gold/pitch50/expected_mappings/case_003.mapping.json",
+      "expected_output_file": "pipeline/gold/pitch50/expected_outputs/case_003.expected.csv"
+    },
+    {
+      "id": "case_004",
+      "input_file": "Endtestdaten_mit_Fehlern_ einheitliche ID/synth_cases_icd10_ops.csv",
+      "expected_table": "tbImportIcd10Data",
+      "expected_mapping_file": "pipeline/gold/pitch50/expected_mappings/case_004.mapping.json",
+      "expected_output_file": "pipeline/gold/pitch50/expected_outputs/case_004.expected.csv"
+    },
+    {
+      "id": "case_005",
+      "input_file": "Endtestdaten_mit_Fehlern_ einheitliche ID/synth_labs.csv",
+      "expected_table": "tbImportLabsData",
+      "expected_mapping_file": "pipeline/gold/pitch50/expected_mappings/case_005.mapping.json",
+      "expected_output_file": "pipeline/gold/pitch50/expected_outputs/case_005.expected.csv"
+    },
+    {
+      "id": "case_006",
+      "input_file": "Endtestdaten_mit_Fehlern_ einheitliche ID/synth_medication_raw_inpatient.csv",
+      "expected_table": "tbImportMedicationInpatientData",
+      "expected_mapping_file": "pipeline/gold/pitch50/expected_mappings/case_006.mapping.json",
+      "expected_output_file": "pipeline/gold/pitch50/expected_outputs/case_006.expected.csv"
+    },
+    {
+      "id": "case_007",
+      "input_file": "Endtestdaten_mit_Fehlern_ einheitliche ID/synth_nursing_daily_reports.csv",
+      "expected_table": "tbImportNursingDailyReportsData",
+      "expected_mapping_file": "pipeline/gold/pitch50/expected_mappings/case_007.mapping.json",
+      "expected_output_file": "pipeline/gold/pitch50/expected_outputs/case_007.expected.csv"
+    },
+    {
+      "id": "case_008",
+      "input_file": "Endtestdaten_ohne_Fehler_ einheitliche ID/epaAC-Data-1.csv",
+      "expected_table": "tbImportAcData",
+      "expected_mapping_file": "pipeline/gold/pitch50/expected_mappings/case_008.mapping.json",
+      "expected_output_file": "pipeline/gold/pitch50/expected_outputs/case_008.expected.csv"
+    },
+    {
+      "id": "case_009",
+      "input_file": "Endtestdaten_mit_Fehlern_ einheitliche ID/synth_device_raw_1hz_motion_fall.xlsx",
+      "expected_table": "tbImportDevice1HzMotionData",
+      "expected_mapping_file": "pipeline/gold/pitch50/expected_mappings/case_009.mapping.json",
+      "expected_output_file": "pipeline/gold/pitch50/expected_outputs/case_009.expected.csv"
+    },
+    {
+      "id": "case_010",
+      "input_file": "Endtestdaten_mit_Fehlern_ einheitliche ID/synth_device_motion_fall.xlsx",
+      "expected_table": "tbImportDeviceMotionData",
+      "expected_mapping_file": "pipeline/gold/pitch50/expected_mappings/case_010.mapping.json",
+      "expected_output_file": "pipeline/gold/pitch50/expected_outputs/case_010.expected.csv"
+    },
+    {
+      "id": "case_011",
+      "input_file": "Endtestdaten_mit_Fehlern_ einheitliche ID/synth_cases_icd10_ops.xlsx",
+      "expected_table": "tbImportIcd10Data",
+      "expected_mapping_file": "pipeline/gold/pitch50/expected_mappings/case_011.mapping.json",
+      "expected_output_file": "pipeline/gold/pitch50/expected_outputs/case_011.expected.csv"
+    },
+    {
+      "id": "case_012",
+      "input_file": "Endtestdaten_mit_Fehlern_ einheitliche ID/synth_labs.xlsx",
+      "expected_table": "tbImportLabsData",
+      "expected_mapping_file": "pipeline/gold/pitch50/expected_mappings/case_012.mapping.json",
+      "expected_output_file": "pipeline/gold/pitch50/expected_outputs/case_012.expected.csv"
+    },
+    {
+      "id": "case_013",
+      "input_file": "Endtestdaten_mit_Fehlern_ einheitliche ID/synth_medication_raw_inpatient.xlsx",
+      "expected_table": "tbImportMedicationInpatientData",
+      "expected_mapping_file": "pipeline/gold/pitch50/expected_mappings/case_013.mapping.json",
+      "expected_output_file": "pipeline/gold/pitch50/expected_outputs/case_013.expected.csv"
+    },
+    {
+      "id": "case_014",
+      "input_file": "Endtestdaten_mit_Fehlern_ einheitliche ID/synth_nursing_daily_reports.xlsx",
+      "expected_table": "tbImportNursingDailyReportsData",
+      "expected_mapping_file": "pipeline/gold/pitch50/expected_mappings/case_014.mapping.json",
+      "expected_output_file": "pipeline/gold/pitch50/expected_outputs/case_014.expected.csv"
+    },
+    {
+      "id": "case_015",
+      "input_file": "Endtestdaten_ohne_Fehler_ einheitliche ID/epaAC-Data-2.csv",
+      "expected_table": "tbImportAcData",
+      "expected_mapping_file": "pipeline/gold/pitch50/expected_mappings/case_015.mapping.json",
+      "expected_output_file": "pipeline/gold/pitch50/expected_outputs/case_015.expected.csv"
+    },
+    {
+      "id": "case_016",
+      "input_file": "Endtestdaten_ohne_Fehler_ einheitliche ID/split_data_pat_case_altered/split_data_pat_case_altered/clinic_1_device_1hz.csv",
+      "expected_table": "tbImportDevice1HzMotionData",
+      "expected_mapping_file": "pipeline/gold/pitch50/expected_mappings/case_016.mapping.json",
+      "expected_output_file": "pipeline/gold/pitch50/expected_outputs/case_016.expected.csv"
+    },
+    {
+      "id": "case_017",
+      "input_file": "Endtestdaten_ohne_Fehler_ einheitliche ID/split_data_pat_case_altered/split_data_pat_case_altered/clinic_1_device.csv",
+      "expected_table": "tbImportDeviceMotionData",
+      "expected_mapping_file": "pipeline/gold/pitch50/expected_mappings/case_017.mapping.json",
+      "expected_output_file": "pipeline/gold/pitch50/expected_outputs/case_017.expected.csv"
+    },
+    {
+      "id": "case_018",
+      "input_file": "Endtestdaten_ohne_Fehler_ einheitliche ID/split_data_pat_case_altered/split_data_pat_case_altered/clinic_1_icd_ops.csv",
+      "expected_table": "tbImportIcd10Data",
+      "expected_mapping_file": "pipeline/gold/pitch50/expected_mappings/case_018.mapping.json",
+      "expected_output_file": "pipeline/gold/pitch50/expected_outputs/case_018.expected.csv"
+    },
+    {
+      "id": "case_019",
+      "input_file": "Endtestdaten_ohne_Fehler_ einheitliche ID/split_data_pat_case_altered/split_data_pat_case_altered/clinic_1_labs.csv",
+      "expected_table": "tbImportLabsData",
+      "expected_mapping_file": "pipeline/gold/pitch50/expected_mappings/case_019.mapping.json",
+      "expected_output_file": "pipeline/gold/pitch50/expected_outputs/case_019.expected.csv"
+    },
+    {
+      "id": "case_020",
+      "input_file": "Endtestdaten_ohne_Fehler_ einheitliche ID/split_data_pat_case_altered/split_data_pat_case_altered/clinic_1_medication.csv",
+      "expected_table": "tbImportMedicationInpatientData",
+      "expected_mapping_file": "pipeline/gold/pitch50/expected_mappings/case_020.mapping.json",
+      "expected_output_file": "pipeline/gold/pitch50/expected_outputs/case_020.expected.csv"
+    },
+    {
+      "id": "case_021",
+      "input_file": "Endtestdaten_ohne_Fehler_ einheitliche ID/split_data_pat_case_altered/split_data_pat_case_altered/clinic_1_nursing.csv",
+      "expected_table": "tbImportNursingDailyReportsData",
+      "expected_mapping_file": "pipeline/gold/pitch50/expected_mappings/case_021.mapping.json",
+      "expected_output_file": "pipeline/gold/pitch50/expected_outputs/case_021.expected.csv"
+    },
+    {
+      "id": "case_022",
+      "input_file": "Endtestdaten_ohne_Fehler_ einheitliche ID/epaAC-Data-3.csv",
+      "expected_table": "tbImportAcData",
+      "expected_mapping_file": "pipeline/gold/pitch50/expected_mappings/case_022.mapping.json",
+      "expected_output_file": "pipeline/gold/pitch50/expected_outputs/case_022.expected.csv"
+    },
+    {
+      "id": "case_023",
+      "input_file": "Endtestdaten_ohne_Fehler_ einheitliche ID/split_data_pat_case_altered/split_data_pat_case_altered/clinic_2_device_1hz.csv",
+      "expected_table": "tbImportDevice1HzMotionData",
+      "expected_mapping_file": "pipeline/gold/pitch50/expected_mappings/case_023.mapping.json",
+      "expected_output_file": "pipeline/gold/pitch50/expected_outputs/case_023.expected.csv"
+    },
+    {
+      "id": "case_024",
+      "input_file": "Endtestdaten_ohne_Fehler_ einheitliche ID/split_data_pat_case_altered/split_data_pat_case_altered/clinic_2_device.csv",
+      "expected_table": "tbImportDeviceMotionData",
+      "expected_mapping_file": "pipeline/gold/pitch50/expected_mappings/case_024.mapping.json",
+      "expected_output_file": "pipeline/gold/pitch50/expected_outputs/case_024.expected.csv"
+    },
+    {
+      "id": "case_025",
+      "input_file": "Endtestdaten_ohne_Fehler_ einheitliche ID/split_data_pat_case_altered/split_data_pat_case_altered/clinic_2_icd_ops.csv",
+      "expected_table": "tbImportIcd10Data",
+      "expected_mapping_file": "pipeline/gold/pitch50/expected_mappings/case_025.mapping.json",
+      "expected_output_file": "pipeline/gold/pitch50/expected_outputs/case_025.expected.csv"
+    },
+    {
+      "id": "case_026",
+      "input_file": "Endtestdaten_ohne_Fehler_ einheitliche ID/split_data_pat_case_altered/split_data_pat_case_altered/clinic_2_labs.csv",
+      "expected_table": "tbImportLabsData",
+      "expected_mapping_file": "pipeline/gold/pitch50/expected_mappings/case_026.mapping.json",
+      "expected_output_file": "pipeline/gold/pitch50/expected_outputs/case_026.expected.csv"
+    },
+    {
+      "id": "case_027",
+      "input_file": "Endtestdaten_ohne_Fehler_ einheitliche ID/split_data_pat_case_altered/split_data_pat_case_altered/clinic_2_medication.csv",
+      "expected_table": "tbImportMedicationInpatientData",
+      "expected_mapping_file": "pipeline/gold/pitch50/expected_mappings/case_027.mapping.json",
+      "expected_output_file": "pipeline/gold/pitch50/expected_outputs/case_027.expected.csv"
+    },
+    {
+      "id": "case_028",
+      "input_file": "Endtestdaten_ohne_Fehler_ einheitliche ID/split_data_pat_case_altered/split_data_pat_case_altered/clinic_2_nursing.csv",
+      "expected_table": "tbImportNursingDailyReportsData",
+      "expected_mapping_file": "pipeline/gold/pitch50/expected_mappings/case_028.mapping.json",
+      "expected_output_file": "pipeline/gold/pitch50/expected_outputs/case_028.expected.csv"
+    },
+    {
+      "id": "case_029",
+      "input_file": "Endtestdaten_ohne_Fehler_ einheitliche ID/epaAC-Data-4.xlsx",
+      "expected_table": "tbImportAcData",
+      "expected_mapping_file": "pipeline/gold/pitch50/expected_mappings/case_029.mapping.json",
+      "expected_output_file": "pipeline/gold/pitch50/expected_outputs/case_029.expected.csv"
+    },
+    {
+      "id": "case_030",
+      "input_file": "Endtestdaten_ohne_Fehler_ einheitliche ID/split_data_pat_case_altered/split_data_pat_case_altered/clinic_3_device_1hz.csv",
+      "expected_table": "tbImportDevice1HzMotionData",
+      "expected_mapping_file": "pipeline/gold/pitch50/expected_mappings/case_030.mapping.json",
+      "expected_output_file": "pipeline/gold/pitch50/expected_outputs/case_030.expected.csv"
+    },
+    {
+      "id": "case_031",
+      "input_file": "Endtestdaten_ohne_Fehler_ einheitliche ID/split_data_pat_case_altered/split_data_pat_case_altered/clinic_3_device.csv",
+      "expected_table": "tbImportDeviceMotionData",
+      "expected_mapping_file": "pipeline/gold/pitch50/expected_mappings/case_031.mapping.json",
+      "expected_output_file": "pipeline/gold/pitch50/expected_outputs/case_031.expected.csv"
+    },
+    {
+      "id": "case_032",
+      "input_file": "Endtestdaten_ohne_Fehler_ einheitliche ID/split_data_pat_case_altered/split_data_pat_case_altered/clinic_3_icd_ops.csv",
+      "expected_table": "tbImportIcd10Data",
+      "expected_mapping_file": "pipeline/gold/pitch50/expected_mappings/case_032.mapping.json",
+      "expected_output_file": "pipeline/gold/pitch50/expected_outputs/case_032.expected.csv"
+    },
+    {
+      "id": "case_033",
+      "input_file": "Endtestdaten_ohne_Fehler_ einheitliche ID/split_data_pat_case_altered/split_data_pat_case_altered/clinic_3_labs.csv",
+      "expected_table": "tbImportLabsData",
+      "expected_mapping_file": "pipeline/gold/pitch50/expected_mappings/case_033.mapping.json",
+      "expected_output_file": "pipeline/gold/pitch50/expected_outputs/case_033.expected.csv"
+    },
+    {
+      "id": "case_034",
+      "input_file": "Endtestdaten_ohne_Fehler_ einheitliche ID/split_data_pat_case_altered/split_data_pat_case_altered/clinic_3_medication.csv",
+      "expected_table": "tbImportMedicationInpatientData",
+      "expected_mapping_file": "pipeline/gold/pitch50/expected_mappings/case_034.mapping.json",
+      "expected_output_file": "pipeline/gold/pitch50/expected_outputs/case_034.expected.csv"
+    },
+    {
+      "id": "case_035",
+      "input_file": "Endtestdaten_ohne_Fehler_ einheitliche ID/split_data_pat_case_altered/split_data_pat_case_altered/clinic_3_nursing.csv",
+      "expected_table": "tbImportNursingDailyReportsData",
+      "expected_mapping_file": "pipeline/gold/pitch50/expected_mappings/case_035.mapping.json",
+      "expected_output_file": "pipeline/gold/pitch50/expected_outputs/case_035.expected.csv"
+    },
+    {
+      "id": "case_036",
+      "input_file": "Endtestdaten_ohne_Fehler_ einheitliche ID/epaAC-Data-5.csv",
+      "expected_table": "tbImportAcData",
+      "expected_mapping_file": "pipeline/gold/pitch50/expected_mappings/case_036.mapping.json",
+      "expected_output_file": "pipeline/gold/pitch50/expected_outputs/case_036.expected.csv"
+    },
+    {
+      "id": "case_037",
+      "input_file": "Endtestdaten_ohne_Fehler_ einheitliche ID/split_data_pat_case_altered/split_data_pat_case_altered/clinic_4_device_1hz.csv",
+      "expected_table": "tbImportDevice1HzMotionData",
+      "expected_mapping_file": "pipeline/gold/pitch50/expected_mappings/case_037.mapping.json",
+      "expected_output_file": "pipeline/gold/pitch50/expected_outputs/case_037.expected.csv"
+    },
+    {
+      "id": "case_038",
+      "input_file": "Endtestdaten_ohne_Fehler_ einheitliche ID/split_data_pat_case_altered/split_data_pat_case_altered/clinic_4_device.csv",
+      "expected_table": "tbImportDeviceMotionData",
+      "expected_mapping_file": "pipeline/gold/pitch50/expected_mappings/case_038.mapping.json",
+      "expected_output_file": "pipeline/gold/pitch50/expected_outputs/case_038.expected.csv"
+    },
+    {
+      "id": "case_039",
+      "input_file": "Endtestdaten_ohne_Fehler_ einheitliche ID/split_data_pat_case_altered/split_data_pat_case_altered/clinic_4_icd_ops.csv",
+      "expected_table": "tbImportIcd10Data",
+      "expected_mapping_file": "pipeline/gold/pitch50/expected_mappings/case_039.mapping.json",
+      "expected_output_file": "pipeline/gold/pitch50/expected_outputs/case_039.expected.csv"
+    },
+    {
+      "id": "case_040",
+      "input_file": "Endtestdaten_ohne_Fehler_ einheitliche ID/split_data_pat_case_altered/split_data_pat_case_altered/clinic_4_labs.csv",
+      "expected_table": "tbImportLabsData",
+      "expected_mapping_file": "pipeline/gold/pitch50/expected_mappings/case_040.mapping.json",
+      "expected_output_file": "pipeline/gold/pitch50/expected_outputs/case_040.expected.csv"
+    },
+    {
+      "id": "case_041",
+      "input_file": "Endtestdaten_ohne_Fehler_ einheitliche ID/split_data_pat_case_altered/split_data_pat_case_altered/clinic_4_medication.csv",
+      "expected_table": "tbImportMedicationInpatientData",
+      "expected_mapping_file": "pipeline/gold/pitch50/expected_mappings/case_041.mapping.json",
+      "expected_output_file": "pipeline/gold/pitch50/expected_outputs/case_041.expected.csv"
+    },
+    {
+      "id": "case_042",
+      "input_file": "Endtestdaten_ohne_Fehler_ einheitliche ID/split_data_pat_case_altered/split_data_pat_case_altered/clinic_4_nursing.pdf",
+      "expected_table": "tbImportNursingDailyReportsData",
+      "expected_mapping_file": "pipeline/gold/pitch50/expected_mappings/case_042.mapping.json",
+      "expected_output_file": "pipeline/gold/pitch50/expected_outputs/case_042.expected.csv"
+    },
+    {
+      "id": "case_043",
+      "input_file": "Endtestdaten_ohne_Fehler_ einheitliche ID/split_data_pat_case_altered/split_data_pat_case_altered/clinic_1_epaAC-Data.csv",
+      "expected_table": "tbImportAcData",
+      "expected_mapping_file": "pipeline/gold/pitch50/expected_mappings/case_043.mapping.json",
+      "expected_output_file": "pipeline/gold/pitch50/expected_outputs/case_043.expected.csv"
+    },
+    {
+      "id": "case_044",
+      "input_file": "Endtestdaten_ohne_Fehler_ einheitliche ID/synthetic_device_raw_1hz_motion_fall.csv",
+      "expected_table": "tbImportDevice1HzMotionData",
+      "expected_mapping_file": "pipeline/gold/pitch50/expected_mappings/case_044.mapping.json",
+      "expected_output_file": "pipeline/gold/pitch50/expected_outputs/case_044.expected.csv"
+    },
+    {
+      "id": "case_045",
+      "input_file": "Endtestdaten_ohne_Fehler_ einheitliche ID/synthetic_device_motion_fall_data.csv",
+      "expected_table": "tbImportDeviceMotionData",
+      "expected_mapping_file": "pipeline/gold/pitch50/expected_mappings/case_045.mapping.json",
+      "expected_output_file": "pipeline/gold/pitch50/expected_outputs/case_045.expected.csv"
+    },
+    {
+      "id": "case_046",
+      "input_file": "Endtestdaten_ohne_Fehler_ einheitliche ID/synthetic_cases_icd10_ops.csv",
+      "expected_table": "tbImportIcd10Data",
+      "expected_mapping_file": "pipeline/gold/pitch50/expected_mappings/case_046.mapping.json",
+      "expected_output_file": "pipeline/gold/pitch50/expected_outputs/case_046.expected.csv"
+    },
+    {
+      "id": "case_047",
+      "input_file": "Endtestdaten_ohne_Fehler_ einheitliche ID/synth_labs_1000_cases.csv",
+      "expected_table": "tbImportLabsData",
+      "expected_mapping_file": "pipeline/gold/pitch50/expected_mappings/case_047.mapping.json",
+      "expected_output_file": "pipeline/gold/pitch50/expected_outputs/case_047.expected.csv"
+    },
+    {
+      "id": "case_048",
+      "input_file": "Endtestdaten_ohne_Fehler_ einheitliche ID/synthetic_medication_raw_inpatient.csv",
+      "expected_table": "tbImportMedicationInpatientData",
+      "expected_mapping_file": "pipeline/gold/pitch50/expected_mappings/case_048.mapping.json",
+      "expected_output_file": "pipeline/gold/pitch50/expected_outputs/case_048.expected.csv"
+    },
+    {
+      "id": "case_049",
+      "input_file": "Endtestdaten_ohne_Fehler_ einheitliche ID/synthetic_nursing_daily_reports_en.csv",
+      "expected_table": "tbImportNursingDailyReportsData",
+      "expected_mapping_file": "pipeline/gold/pitch50/expected_mappings/case_049.mapping.json",
+      "expected_output_file": "pipeline/gold/pitch50/expected_outputs/case_049.expected.csv"
+    },
+    {
+      "id": "case_050",
+      "input_file": "Endtestdaten_ohne_Fehler_ einheitliche ID/split_data_pat_case_altered/split_data_pat_case_altered/clinic_2_epaAC-Data.csv",
+      "expected_table": "tbImportAcData",
+      "expected_mapping_file": "pipeline/gold/pitch50/expected_mappings/case_050.mapping.json",
+      "expected_output_file": "pipeline/gold/pitch50/expected_outputs/case_050.expected.csv"
+    }
+  ]
+}

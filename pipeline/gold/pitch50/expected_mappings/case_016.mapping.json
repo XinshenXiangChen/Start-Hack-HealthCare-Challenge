@@ -1,0 +1,20 @@
+{
+  "patient_id": "coPatient_id",
+  "device_id": "coDevice_id",
+  "timestamp": "coTimestamp",
+  "bed_occupied_0_1": "coBed_occupied_0_1",
+  "movement_score_0_100": "coMovement_score_0_100",
+  "accel_x_m_s2": "coAccel_x_m_s2",
+  "accel_y_m_s2": "coAccel_y_m_s2",
+  "accel_z_m_s2": "coAccel_z_m_s2",
+  "accel_magnitude_g": "coAccel_magnitude_g",
+  "pressure_zone1_0_100": "coPressure_zone1_0_100",
+  "pressure_zone2_0_100": "coPressure_zone2_0_100",
+  "pressure_zone3_0_100": "coPressure_zone3_0_100",
+  "pressure_zone4_0_100": "coPressure_zone4_0_100",
+  "bed_exit_event_0_1": "coBed_exit_event_0_1",
+  "bed_return_event_0_1": "coBed_return_event_0_1",
+  "fall_event_0_1": "coFall_event_0_1",
+  "impact_magnitude_g": "coImpact_magnitude_g",
+  "event_id": "coEvent_id"
+}
