@@ -42,6 +42,25 @@ _IID_DICTIONARY_SOURCE: str | None = None
 _IID_LOOKUP_INITIALIZED = False
 
 
+def parse_bool_env(name: str, default: bool = False) -> bool:
+    text = (os.getenv(name) or "").strip().lower()
+    if not text:
+        return default
+    return text in {"1", "true", "yes", "on"}
+
+
+DEBUG_ROUTING = parse_bool_env("PIPELINE_DEBUG_ROUTING", False)
+
+
+def log_routing_debug(payload: dict[str, Any]) -> None:
+    if not DEBUG_ROUTING:
+        return
+    print(
+        "[routing-debug] " + json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
+        flush=True,
+    )
+
+
 TABLE_HINTS = {
     "tbImportLabsData": ["lab", "labs"],
     "tbImportIcd10Data": ["icd", "ops"],
@@ -950,48 +969,79 @@ def load_records(path: Path, table: str) -> tuple[list[str], list[dict[str, Any]
 
 
 def detect_table(
-    path: Path, headers: list[str], profile: dict[str, Any] | None = None
+    path: Path,
+    headers: list[str],
+    profile: dict[str, Any] | None = None,
+    debug: dict[str, Any] | None = None,
 ) -> str | None:
+    if debug is not None:
+        debug["input_file"] = str(path)
+        debug["filename"] = path.name
+        debug["headers_count"] = len(headers)
+        debug["headers_sample"] = headers[:12]
+        debug["profile_sql_table"] = (
+            str(profile.get("sql_table")) if profile and profile.get("sql_table") else None
+        )
+
+    def matched(table: str, by: str, value: str | None = None) -> str:
+        if debug is not None:
+            debug["matched_table"] = table
+            debug["matched_by"] = by
+            debug["matched_value"] = value
+        return table
+
     name = path.name.lower()
     if profile and profile.get("sql_table"):
         sql_name = normalize(str(profile["sql_table"]))
         target_by_norm = {normalize(t): t for t in TABLE_HINTS}
         if sql_name in target_by_norm:
-            return target_by_norm[sql_name]
+            return matched(
+                target_by_norm[sql_name],
+                "sql_table_exact",
+                str(profile["sql_table"]),
+            )
         if "1hz" in sql_name:
-            return "tbImportDevice1HzMotionData"
+            return matched("tbImportDevice1HzMotionData", "sql_table_keyword", "1hz")
         if "device" in sql_name:
-            return "tbImportDeviceMotionData"
+            return matched("tbImportDeviceMotionData", "sql_table_keyword", "device")
         if "labs" in sql_name or "lab" in sql_name:
-            return "tbImportLabsData"
+            return matched("tbImportLabsData", "sql_table_keyword", "labs")
         if "icd" in sql_name or "ops" in sql_name:
-            return "tbImportIcd10Data"
+            return matched("tbImportIcd10Data", "sql_table_keyword", "icd/ops")
         if "med" in sql_name:
-            return "tbImportMedicationInpatientData"
+            return matched("tbImportMedicationInpatientData", "sql_table_keyword", "med")
         if "nursing" in sql_name or "report" in sql_name:
-            return "tbImportNursingDailyReportsData"
+            return matched(
+                "tbImportNursingDailyReportsData",
+                "sql_table_keyword",
+                "nursing/report",
+            )
         if "acdata" in sql_name or "epaac" in sql_name:
-            return "tbImportAcData"
+            return matched("tbImportAcData", "sql_table_keyword", "acdata/epaac")
 
     if "1hz" in name:
-        return "tbImportDevice1HzMotionData"
+        return matched("tbImportDevice1HzMotionData", "filename_keyword", "1hz")
     if "device" in name:
-        return "tbImportDeviceMotionData"
+        return matched("tbImportDeviceMotionData", "filename_keyword", "device")
     if "labs" in name:
-        return "tbImportLabsData"
+        return matched("tbImportLabsData", "filename_keyword", "labs")
     if "icd" in name or "ops" in name:
-        return "tbImportIcd10Data"
+        return matched("tbImportIcd10Data", "filename_keyword", "icd/ops")
     if "med" in name:
-        return "tbImportMedicationInpatientData"
+        return matched("tbImportMedicationInpatientData", "filename_keyword", "med")
     if "nursing" in name or "report" in name:
-        return "tbImportNursingDailyReportsData"
+        return matched("tbImportNursingDailyReportsData", "filename_keyword", "nursing/report")
     if "epaac" in name:
-        return "tbImportAcData"
+        return matched("tbImportAcData", "filename_keyword", "epaac")
 
     joined = " ".join(headers).lower()
     for table, hints in TABLE_HINTS.items():
         if all(h in joined for h in hints[:1]):
-            return table
+            return matched(table, "header_hint", hints[0])
+    if debug is not None:
+        debug["matched_table"] = None
+        debug["matched_by"] = "none"
+        debug["matched_value"] = None
     return None
 
 
@@ -1269,19 +1319,40 @@ def main() -> None:
     for path in files:
         try:
             headers_probe, _, profile_probe = load_records(path, "tbImportAcData")
-            table = detect_table(path, headers_probe, profile_probe)
+            routing_debug: dict[str, Any] = {}
+            table = detect_table(path, headers_probe, profile_probe, debug=routing_debug)
             if not table or table not in schema:
+                log_routing_debug(
+                    {
+                        "file": str(path),
+                        "status": "skipped",
+                        "reason": "table_not_detected_or_not_in_schema",
+                        "routing_debug": routing_debug,
+                    }
+                )
                 report.append(
                     {
                         "file": str(path),
                         "status": "skipped",
                         "reason": "table_not_detected_or_not_in_schema",
+                        "routing_debug": routing_debug,
                     }
                 )
                 continue
 
             headers, records, profile = load_records(path, table)
             target_cols = [c for c in schema[table] if c != "coId"]
+            routing_debug["target_cols_count"] = len(target_cols)
+            routing_debug["target_cols_sample"] = target_cols[:12]
+            profile["routing_debug"] = routing_debug
+            log_routing_debug(
+                {
+                    "file": str(path),
+                    "status": "ok",
+                    "table": table,
+                    "routing_debug": routing_debug,
+                }
+            )
             mapping = build_mapping(
                 table=table,
                 headers=headers,
@@ -1317,6 +1388,7 @@ def main() -> None:
                     "unmapped_headers": [h for h in headers if h not in mapping],
                     "profile": profile,
                     "iid_dictionary": iid_source,
+                    "routing_debug": routing_debug,
                 }
             )
         except Exception as exc:
