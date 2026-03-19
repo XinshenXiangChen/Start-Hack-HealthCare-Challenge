@@ -55,6 +55,15 @@ TABLE_HINTS = {
 
 AC_LEGACY_CASE_KEYS = {"patfal", "fallid", "fall_id", "caseid", "case_id", "cas"}
 AC_LEGACY_CASE_ALPHA_KEYS = {"patfoe", "patdoe"}
+AC_SID_COL_KEYS = {"sid", "itmsid", "itemsid", "sidcode", "itemcode"}
+AC_SID_VALUE_COL_KEYS = {
+    "sid_value",
+    "sidvalue",
+    "itemvalue",
+    "value",
+    "val",
+    "wert",
+}
 
 
 ALIASES = {
@@ -1148,17 +1157,53 @@ def build_mapping(
             if src in unresolved and dest in target_set:
                 mapping[src] = dest
 
+    # Keep only one source per target column (first source column wins).
+    # This avoids unstable overwrites when many headers map to the same destination.
+    deduped: dict[str, str] = {}
+    used_targets: set[str] = set()
+    for source_col in headers:
+        dest = mapping.get(source_col)
+        if not dest or dest in used_targets:
+            continue
+        deduped[source_col] = dest
+        used_targets.add(dest)
+    mapping = deduped
+
     return mapping
 
 
+def detect_ac_sid_columns(headers: list[str]) -> tuple[str | None, str | None]:
+    sid_col: str | None = None
+    val_col: str | None = None
+    for col in headers:
+        n = normalize(col)
+        if sid_col is None and n in AC_SID_COL_KEYS:
+            sid_col = col
+        if val_col is None and n in AC_SID_VALUE_COL_KEYS:
+            val_col = col
+    return sid_col, val_col
+
+
 def standardize_records(
-    records: list[dict[str, Any]], target_cols: list[str], mapping: dict[str, str]
+    records: list[dict[str, Any]],
+    target_cols: list[str],
+    mapping: dict[str, str],
+    table: str | None = None,
+    headers: list[str] | None = None,
 ) -> list[dict[str, Any]]:
     out_rows: list[dict[str, Any]] = []
+    sid_col = None
+    sid_value_col = None
+    if table == "tbImportAcData" and headers:
+        sid_col, sid_value_col = detect_ac_sid_columns(headers)
+    target_set = set(target_cols)
+
     for rec in records:
         out = {c: "" for c in target_cols}
         for src, dest in mapping.items():
             if src not in rec:
+                continue
+            if src == sid_col or src == sid_value_col:
                 continue
             val = rec[src]
             if val is None:
@@ -1167,6 +1212,17 @@ def standardize_records(
             if not val:
                 continue
             out[dest] = val
+
+        # AC long format (SID + SID_value): dynamic row-wise mapping
+        # e.g., SID=00_14 and SID_value=70 -> coE0I014=70
+        if table == "tbImportAcData" and sid_col and sid_value_col:
+            sid_raw = str(rec.get(sid_col, "") or "").strip()
+            val_raw = str(rec.get(sid_value_col, "") or "").strip()
+            if sid_raw and val_raw:
+                dyn_dest = resolve_ac_header_with_iid_dictionary(sid_raw)
+                if dyn_dest and dyn_dest in target_set:
+                    out[dyn_dest] = val_raw
+
         out_rows.append(out)
     return out_rows
 
@@ -1235,7 +1291,13 @@ def main() -> None:
                 timeout_s=args.llm_timeout,
                 prompt_template=prompt_template,
             )
-            rows = standardize_records(records, target_cols, mapping)
+            rows = standardize_records(
+                records=records,
+                target_cols=target_cols,
+                mapping=mapping,
+                table=table,
+                headers=headers,
+            )
 
             ext = path.suffix.lower().lstrip(".")
             output_name = f"{path.stem}__{ext}__{table}.csv"

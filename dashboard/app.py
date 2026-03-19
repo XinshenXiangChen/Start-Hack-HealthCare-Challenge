@@ -1023,7 +1023,13 @@ async def process_file(path: Path, source: str, job: Job) -> None:
                 .read_text(encoding="utf-8")
             ),
         )
-        rows = std.standardize_records(records, target_cols, mapping)
+        rows = std.standardize_records(
+            records=records,
+            target_cols=target_cols,
+            mapping=mapping,
+            table=table,
+            headers=headers,
+        )
 
         semantic_rows_enriched = 0
         semantic_extraction_used = False
