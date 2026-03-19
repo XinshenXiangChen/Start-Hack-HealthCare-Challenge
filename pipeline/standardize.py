@@ -621,6 +621,26 @@ def sanitize_entity_id_fields(row: dict[str, Any]) -> None:
             row[col] = ""
 
 
+def record_group_signature(rec: dict[str, Any], skip_cols: set[str]) -> tuple[tuple[str, str], ...]:
+    sig: list[tuple[str, str]] = []
+    for key in sorted(rec.keys()):
+        if key in skip_cols:
+            continue
+        val = str(rec.get(key, "") or "").strip()
+        if not val:
+            continue
+        sig.append((key, val))
+    return tuple(sig)
+
+
+def is_sid_code_text(value: str) -> bool:
+    txt = str(value or "").strip()
+    if not txt:
+        return False
+    txt = txt.replace("-", "_")
+    return bool(SID_CODE_RE.fullmatch(txt))
+
+
 def strip_trailing_empty(row: list[str]) -> list[str]:
     out = row[:]
     while out and out[-1] == "":
@@ -1264,6 +1284,58 @@ def standardize_records(
     if table == "tbImportAcData" and headers:
         sid_col, sid_value_col = detect_ac_sid_columns(headers)
     target_set = set(target_cols)
+
+    # AC long format: one assessment often spans multiple rows (SID, SID_value pairs).
+    # Collapse rows that share the same non-SID context into a single standardized row.
+    if table == "tbImportAcData" and sid_col and sid_value_col:
+        skip_cols = {sid_col, sid_value_col}
+        grouped: dict[tuple[tuple[str, str], ...], list[dict[str, Any]]] = {}
+        for rec in records:
+            sig = record_group_signature(rec, skip_cols)
+            grouped.setdefault(sig, []).append(rec)
+
+        for group_records in grouped.values():
+            out = {c: "" for c in target_cols}
+            base_rec = group_records[0]
+
+            # Apply static column mapping from the common context fields.
+            for src, dest in mapping.items():
+                if src not in base_rec:
+                    continue
+                if src == sid_col or src == sid_value_col:
+                    continue
+                val = base_rec[src]
+                if val is None:
+                    continue
+                val = str(val).strip()
+                if not val:
+                    continue
+                out[dest] = val
+
+            # Apply dynamic SID/SID_value mapping for every row in the group.
+            for rec in group_records:
+                sid_raw = str(rec.get(sid_col, "") or "").strip()
+                val_raw = str(rec.get(sid_value_col, "") or "").strip()
+                if not sid_raw or not val_raw:
+                    continue
+                sid_dest = resolve_ac_header_with_iid_dictionary(sid_raw)
+                if not sid_dest or sid_dest not in target_set:
+                    continue
+
+                # If SID_value is itself a coded SID token (e.g. 00_16_01), map that token
+                # to its own target item and set a flag value instead of writing the code string
+                # into the parent item column.
+                if is_sid_code_text(val_raw):
+                    val_dest = resolve_ac_header_with_iid_dictionary(val_raw)
+                    if val_dest and val_dest in target_set and val_dest != sid_dest:
+                        out[val_dest] = "1"
+                        continue
+
+                out[sid_dest] = val_raw
+
+            sanitize_entity_id_fields(out)
+            out_rows.append(out)
+        return out_rows
 
     for rec in records:
         out = {c: "" for c in target_cols}
