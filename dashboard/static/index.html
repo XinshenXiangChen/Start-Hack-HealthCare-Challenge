@@ -182,15 +182,13 @@
       fd.append("file", file);
       const res = await fetch("/api/upload", { method: "POST", body: fd });
       const data = await res.json();
-      uploadStatus.textContent = res.ok
-        ? `Uploaded: ${data.saved_to} (scheduled: ${data.scheduled_immediately ? "yes" : "already queued"})`
-        : `Upload failed: ${data.detail || "unknown error"}`;
+      uploadStatus.textContent = res.ok ? `Uploaded: ${data.saved_to}` : `Upload failed: ${data.detail || "unknown error"}`;
       document.getElementById("file").value = "";
       await refresh();
     });
 
     refresh();
-    setInterval(refresh, 1200);
+    setInterval(refresh, 4000);
   </script>
 </body>
 </html>
