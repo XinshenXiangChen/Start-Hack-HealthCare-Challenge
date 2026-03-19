@@ -954,6 +954,9 @@ def purge_runtime_files() -> int:
             if p.is_file():
                 p.unlink(missing_ok=True)
                 deleted += 1
+    if DB_PATH.exists() and DB_PATH.is_file():
+        DB_PATH.unlink(missing_ok=True)
+        deleted += 1
     return deleted
 
 
