@@ -225,28 +225,33 @@ async def process_file(path: Path, source: str) -> None:
         await state.update_job(job)
 
 
+def schedule_processing(path: Path, source: str) -> bool:
+    try:
+        sig = signature(path)
+    except FileNotFoundError:
+        return False
+    if sig in state.seen_signatures or sig in state.running_signatures:
+        return False
+    state.running_signatures.add(sig)
+
+    async def _run(p: Path, s: str, sig_value: str) -> None:
+        try:
+            await process_file(p, s)
+        finally:
+            state.running_signatures.discard(sig_value)
+            state.seen_signatures.add(sig_value)
+
+    asyncio.create_task(_run(path, source, sig))
+    return True
+
+
 async def scanner_loop() -> None:
     while True:
         try:
             for path in sorted(INPUT_DIR.rglob("*")):
                 if not path.is_file() or path.suffix.lower() not in SUPPORTED_EXT:
                     continue
-                try:
-                    sig = signature(path)
-                except FileNotFoundError:
-                    continue
-                if sig in state.seen_signatures or sig in state.running_signatures:
-                    continue
-                state.running_signatures.add(sig)
-
-                async def _run(p: Path, s: str, sig_value: str) -> None:
-                    try:
-                        await process_file(p, s)
-                    finally:
-                        state.running_signatures.discard(sig_value)
-                        state.seen_signatures.add(sig_value)
-
-                asyncio.create_task(_run(path, "watcher", sig))
+                schedule_processing(path, "watcher")
         except Exception:
             pass
         await asyncio.sleep(max(1, SCAN_SECONDS))
@@ -297,7 +302,8 @@ async def api_upload(file: UploadFile = File(...)) -> dict[str, Any]:
     dst = INPUT_DIR / f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{safe_name(file.filename or 'upload')}"
     with dst.open("wb") as f:
         shutil.copyfileobj(file.file, f)
-    return {"status": "accepted", "saved_to": str(dst)}
+    scheduled = schedule_processing(dst, "upload")
+    return {"status": "accepted", "saved_to": str(dst), "scheduled_immediately": scheduled}
 
 
 @app.get("/api/download/{job_id}")
