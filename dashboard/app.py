@@ -137,6 +137,28 @@ class State:
             "scan_seconds": SCAN_SECONDS,
         }
 
+    async def reset_state(self) -> dict[str, int]:
+        async with self.lock:
+            running = sum(1 for j in self.jobs if j.status == "running")
+            if running > 0:
+                return {"running_jobs": running, "cleared_jobs": 0, "cleared_queue_items": 0}
+            cleared_jobs = len(self.jobs)
+            self.jobs.clear()
+            self.jobs_by_id.clear()
+            self.seen_signatures.clear()
+            self.queued_signatures.clear()
+            self.running_signatures.clear()
+
+        cleared_q = 0
+        while True:
+            try:
+                _ = self.queue.get_nowait()
+                self.queue.task_done()
+                cleared_q += 1
+            except asyncio.QueueEmpty:
+                break
+        return {"running_jobs": 0, "cleared_jobs": cleared_jobs, "cleared_queue_items": cleared_q}
+
 
 state = State()
 
@@ -145,6 +167,18 @@ def ensure_dirs() -> None:
     INPUT_DIR.mkdir(parents=True, exist_ok=True)
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     ARCHIVE_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def purge_runtime_files() -> int:
+    deleted = 0
+    for base in (INPUT_DIR, OUTPUT_DIR, ARCHIVE_DIR):
+        if not base.exists():
+            continue
+        for p in base.rglob("*"):
+            if p.is_file():
+                p.unlink(missing_ok=True)
+                deleted += 1
+    return deleted
 
 
 def detect_table_with_fallback(
@@ -370,3 +404,21 @@ async def api_download(job_id: str) -> FileResponse:
     if not path.exists():
         raise HTTPException(status_code=404, detail="output file missing")
     return FileResponse(path=str(path), filename=path.name, media_type="text/csv")
+
+
+@app.post("/api/reset")
+async def api_reset(purge_files: bool = False) -> dict[str, Any]:
+    result = await state.reset_state()
+    if result["running_jobs"] > 0:
+        raise HTTPException(
+            status_code=409,
+            detail=f"cannot reset while {result['running_jobs']} job(s) are running",
+        )
+    deleted_files = purge_runtime_files() if purge_files else 0
+    return {
+        "status": "ok",
+        "cleared_jobs": result["cleared_jobs"],
+        "cleared_queue_items": result["cleared_queue_items"],
+        "purge_files": purge_files,
+        "deleted_files": deleted_files,
+    }

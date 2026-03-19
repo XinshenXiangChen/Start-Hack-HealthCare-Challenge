@@ -61,6 +61,9 @@
       background: var(--accent);
       color: #fff;
     }
+    button.reset {
+      background: #c23d3d;
+    }
     .meta { color: var(--ink-soft); font-size: 13px; margin-top: 10px; }
     table { width: 100%; border-collapse: collapse; background: var(--surface); border-radius: 12px; overflow: hidden; }
     th, td { padding: 10px 12px; border-bottom: 1px solid var(--line); text-align: left; font-size: 14px; vertical-align: top; }
@@ -100,6 +103,13 @@
           <input id="file" name="file" type="file" required />
           <button type="submit">Upload To Intake Queue</button>
         </form>
+        <div style="margin-top:10px;display:flex;gap:8px;align-items:center;">
+          <button id="reset-btn" class="reset" type="button">Reset Dashboard</button>
+          <label style="font-size:12px;color:#5f6f78;">
+            <input id="purge-files" type="checkbox" />
+            also delete runtime files
+          </label>
+        </div>
         <p id="upload-status" class="meta"></p>
         <div class="meta" id="cfg"></div>
       </section>
@@ -190,6 +200,19 @@
         ? `Uploaded: ${data.saved_to} (queued: ${data.queued ? "yes" : "already seen"}) ${data.job_id ? "| job: " + data.job_id : ""}`
         : `Upload failed: ${data.detail || "unknown error"}`;
       document.getElementById("file").value = "";
+      await refresh();
+    });
+
+    document.getElementById("reset-btn").addEventListener("click", async () => {
+      const purge = document.getElementById("purge-files").checked;
+      const ok = confirm(`Reset dashboard state${purge ? " and delete runtime files" : ""}?`);
+      if (!ok) return;
+      uploadStatus.textContent = "Resetting...";
+      const res = await fetch(`/api/reset?purge_files=${purge ? "true" : "false"}`, { method: "POST" });
+      const data = await res.json();
+      uploadStatus.textContent = res.ok
+        ? `Reset done: jobs=${data.cleared_jobs}, queue=${data.cleared_queue_items}, deleted_files=${data.deleted_files}`
+        : `Reset failed: ${data.detail || "unknown error"}`;
       await refresh();
     });
 
