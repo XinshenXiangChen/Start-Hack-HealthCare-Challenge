@@ -402,6 +402,16 @@
       cmpAfter.innerHTML = renderPreview(data.after);
     }
 
+    async function rerunJob(jobId) {
+      uploadStatus.textContent = `Requeueing job ${jobId}...`;
+      const res = await fetch(`/api/rerun/${encodeURIComponent(jobId)}`, { method: "POST" });
+      const data = await res.json();
+      uploadStatus.textContent = res.ok
+        ? `Rerun queued: source ${data.source_job_id} -> new job ${data.job_id} (queued: ${data.queued ? "yes" : "no"})`
+        : `Rerun failed: ${data.detail || "unknown error"}`;
+      await refresh();
+    }
+
     async function refresh() {
       const [sumRes, jobsRes] = await Promise.all([
         fetch("/api/summary"),
@@ -427,7 +437,10 @@
         const rows = (j.rows_in ?? "-") + "/" + (j.rows_out ?? "-");
         const sem = j.semantic_extraction_used ? `yes (${j.semantic_rows_enriched})` : "no";
         const linked = `${j.linked_rows || 0} (${j.linked_entities_touched || 0} ent)`;
-        const view = `<button class="mini" type="button" onclick="openCompare('${j.id}')">visualize</button>`;
+        const rerun = (j.status === "ok" || j.status === "error")
+          ? `<button class="mini" type="button" onclick="rerunJob('${j.id}')">rerun</button>`
+          : "";
+        const view = `<button class="mini" type="button" onclick="openCompare('${j.id}')">visualize</button> ${rerun}`;
         const out = j.output_file ? `<a class="dl" href="/api/download/${j.id}">download</a>` : "-";
         return `<tr>
           <td>${chip(j.status)}</td>
@@ -505,6 +518,7 @@
     });
     window.openCompare = openCompare;
     window.openEntity = openEntity;
+    window.rerunJob = rerunJob;
 
     refresh();
     setInterval(refresh, 1200);

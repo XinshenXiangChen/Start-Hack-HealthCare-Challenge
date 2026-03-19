@@ -1267,6 +1267,36 @@ async def api_upload(file: UploadFile = File(...)) -> dict[str, Any]:
     }
 
 
+@app.post("/api/rerun/{job_id}")
+async def api_rerun(job_id: str) -> dict[str, Any]:
+    job = await state.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="job not found")
+    if job.status in {"queued", "running"}:
+        raise HTTPException(status_code=409, detail="job is still in progress")
+
+    src_path = resolve_job_input_path(job)
+    if src_path is None:
+        raise HTTPException(status_code=404, detail="input source file not found")
+    if src_path.suffix.lower() not in SUPPORTED_EXT:
+        raise HTTPException(status_code=400, detail="unsupported file type for rerun")
+
+    ensure_dirs()
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    rerun_name = f"{stamp}_rerun_{job.id}_{safe_name(src_path.name)}"
+    dst = INPUT_DIR / rerun_name
+    shutil.copy2(src_path, dst)
+
+    scheduled, new_job_id = await enqueue_processing(dst, f"rerun:{job_id}")
+    return {
+        "status": "accepted",
+        "source_job_id": job_id,
+        "saved_to": str(dst),
+        "queued": scheduled,
+        "job_id": new_job_id,
+    }
+
+
 @app.get("/api/download/{job_id}")
 async def api_download(job_id: str) -> FileResponse:
     job = state.jobs_by_id.get(job_id)
