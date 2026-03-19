@@ -1,0 +1,11 @@
+.venv/
+runtime/
+out/
+pipeline/out/
+__pycache__/
+*.sqlite
+*.db
+*.log
+*.DS_Store
+.git/
+.github/
