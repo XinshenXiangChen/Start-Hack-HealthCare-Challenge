@@ -3,75 +3,257 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Evaluation Dashboard</title>
+    <title>Clinical Intake Dashboard</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
   </head>
   <body>
-    <div class="css-root"></div>
-    <div class="container">
-      <div class="header">
-        <div class="brand">
-          <h1>Evaluation Dashboard</h1>
-          <div class="sub">Run the standardization evaluator and inspect nulls, mismatches, and type issues per case.</div>
+    <div class="shell">
+      <section class="hero">
+        <div class="hero-copy">
+          <span class="eyebrow">START Hack 2026</span>
+          <h1>Clinical intake dashboard</h1>
+          <p>
+            Upload source files, detect their structure automatically, validate quality, and review what action is needed before export.
+          </p>
+          <div class="hero-actions">
+            {% if latest_run_id %}
+              <a class="button secondary" href="{{ url_for('run_details', run_id=latest_run_id) }}">Open latest review</a>
+            {% endif %}
+            <span class="pill soft">Automatic intake enabled</span>
+          </div>
         </div>
-        <div>
-          {% if latest_run_id %}
-            <span class="pill">
-              Latest run:
-              <a href="{{ url_for('run_details', run_id=latest_run_id) }}" style="margin-left: 8px;">{{ latest_run_id }}</a>
-            </span>
-          {% else %}
-            <span class="pill">No runs yet.</span>
-          {% endif %}
+        <div class="hero-panel">
+          <h2>Review workflow</h2>
+          <div class="checkpoint-list">
+            <div class="checkpoint">
+              <strong>1. Intake</strong>
+              <span>See file origin, format, and target table before processing.</span>
+            </div>
+            <div class="checkpoint">
+              <strong>2. Validation</strong>
+              <span>Measure completeness, type consistency, and output fidelity.</span>
+            </div>
+            <div class="checkpoint">
+              <strong>3. Action</strong>
+              <span>Choose replace, manual completion, or discard for each problematic file.</span>
+            </div>
+          </div>
         </div>
-      </div>
+      </section>
 
-      <div class="grid two">
-        <div class="card">
-          <h2>Run Evaluation</h2>
-          <form method="post" action="{{ url_for('run') }}">
-            <label for="manifest">Manifest</label>
-            <select id="manifest" name="manifest" required>
-              {% for m in manifests %}
-                <option value="{{ m.value }}">{{ m.label }}</option>
-              {% endfor %}
-            </select>
-
-            <label for="data_root">Data Root (optional)</label>
-            <input id="data_root" name="data_root" placeholder="e.g. D:/epaCC-START-Hack-2026" />
-
-            <label for="model">Model (Ollama model name)</label>
-            <input id="model" name="model" value="llama3.2:latest" />
-
-            <label for="llm_timeout">LLM Timeout (seconds)</label>
-            <input id="llm_timeout" name="llm_timeout" value="45" />
-
-            <div class="row">
-              <label style="margin-top: 0;">
-                <input type="checkbox" name="no_llm" />
-                <span style="margin-left: 8px;">Disable LLM (rule-based mapping only)</span>
-              </label>
+      <section class="grid two">
+        <div class="card accent">
+          <div class="section-head">
+            <div>
+              <span class="eyebrow">Upload files</span>
+              <h2>Start review</h2>
+            </div>
+          </div>
+          <form method="post" action="{{ url_for('run') }}" class="stack-form" enctype="multipart/form-data">
+            <label for="files">Source files</label>
+            <label for="files" class="upload-dropzone" id="upload-dropzone">
+              <span class="upload-title">Drag and drop files here</span>
+              <span class="upload-subtitle">or click to select files from Finder</span>
+              <span class="upload-subtitle" id="upload-status">No files selected</span>
+              <input id="files" name="files" type="file" multiple accept=".csv,.xlsx,.pdf,.sql" />
+            </label>
+            <div class="field-hint">
+              Supported formats: CSV, XLSX, PDF, and SQL. The app will detect the dataset type automatically.
             </div>
 
-            <button type="submit">Run Evaluation</button>
+            <label class="checkline">
+              <input type="checkbox" name="no_llm" />
+              <span>Run in rule-based mode only</span>
+            </label>
+
+            <div class="field-hint">
+              Processing settings are managed automatically by the system.
+            </div>
+
+            <button type="submit">Run evaluation</button>
           </form>
-          <div class="muted" style="margin-top: 12px;">
-            Tip: if the manifest’s `input_file` paths aren’t found, set <b>Data Root</b> to the folder that contains the dataset files.
-          </div>
         </div>
 
         <div class="card">
-          <h2>What You’ll See</h2>
-          <div class="muted" style="line-height: 1.6;">
-            For each case, the UI highlights:
-            <br />- required column null/missing fill rate
-            <br />- type mismatches (examples)
-            <br />- mapping mismatches (precision/recall/F1 + keys)
-            <br />- output cell mismatches (samples)
+          <div class="section-head">
+            <div>
+              <span class="eyebrow">Upload status</span>
+              <h2>Selected files</h2>
+            </div>
+          </div>
+          <div class="upload-table-wrap">
+            <table class="upload-table">
+              <thead>
+                <tr>
+                  <th>Select</th>
+                  <th>File name</th>
+                  <th>Size</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="upload-table-body">
+                <tr class="upload-empty-row">
+                  <td colspan="4">No files selected yet.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="upload-actions">
+            <button type="button" class="button secondary" id="remove-selected-files">Remove selected</button>
+          </div>
+          <div class="field-hint">
+            Files listed here are ready to be submitted with the intake review.
           </div>
         </div>
-      </div>
+      </section>
+
+      <section class="card">
+        <div class="section-head">
+          <div>
+            <span class="eyebrow">How it works</span>
+            <h2>Upload-first review flow</h2>
+          </div>
+          {% if latest_run_id %}
+            <a class="pill" href="{{ url_for('run_details', run_id=latest_run_id) }}">Latest run: {{ latest_run_id }}</a>
+          {% else %}
+            <span class="pill soft">No runs yet</span>
+          {% endif %}
+        </div>
+
+        <div class="feature-grid">
+          <div class="feature">
+            <strong>1. Upload</strong>
+            <span>Select one or more files from the local machine.</span>
+          </div>
+          <div class="feature">
+            <strong>2. Detect</strong>
+            <span>The system identifies the source type and proposed destination table.</span>
+          </div>
+          <div class="feature">
+            <strong>3. Standardize</strong>
+            <span>Columns are mapped into the standardized schema using rules and optional LLM fallback.</span>
+          </div>
+          <div class="feature">
+            <strong>4. Review</strong>
+            <span>The results page shows quality, anomalies, and the recommended next action.</span>
+          </div>
+        </div>
+      </section>
     </div>
+    <script>
+      (function () {
+        const fileInput = document.getElementById("files");
+        const dropzone = document.getElementById("upload-dropzone");
+        const status = document.getElementById("upload-status");
+        const tableBody = document.getElementById("upload-table-body");
+        const removeButton = document.getElementById("remove-selected-files");
+        let selectedFiles = [];
+
+        if (!fileInput || !dropzone || !status || !tableBody || !removeButton) {
+          return;
+        }
+
+        const formatBytes = (bytes) => {
+          if (!Number.isFinite(bytes) || bytes < 1024) {
+            return `${bytes || 0} B`;
+          }
+          const units = ["KB", "MB", "GB"];
+          let value = bytes / 1024;
+          let unitIndex = 0;
+          while (value >= 1024 && unitIndex < units.length - 1) {
+            value /= 1024;
+            unitIndex += 1;
+          }
+          return `${value.toFixed(1)} ${units[unitIndex]}`;
+        };
+
+        const syncInputFiles = () => {
+          const transfer = new DataTransfer();
+          selectedFiles.forEach((file) => transfer.items.add(file));
+          fileInput.files = transfer.files;
+        };
+
+        const renderFiles = () => {
+          const rows = selectedFiles;
+          tableBody.innerHTML = "";
+
+          if (!rows.length) {
+            status.textContent = "No files selected";
+            const emptyRow = document.createElement("tr");
+            emptyRow.className = "upload-empty-row";
+            emptyRow.innerHTML = '<td colspan="4">No files selected yet.</td>';
+            tableBody.appendChild(emptyRow);
+            removeButton.disabled = true;
+            return;
+          }
+
+          status.textContent = `${rows.length} file${rows.length === 1 ? "" : "s"} ready`;
+          removeButton.disabled = false;
+
+          rows.forEach((file, index) => {
+            const row = document.createElement("tr");
+            row.innerHTML = `
+              <td><input type="checkbox" class="upload-select" data-index="${index}" /></td>
+              <td>${file.name}</td>
+              <td>${formatBytes(file.size)}</td>
+              <td><span class="pill good">Ready <span class="upload-checkmark">✓</span></span></td>
+            `;
+            tableBody.appendChild(row);
+          });
+        };
+
+        const addFiles = (files) => {
+          const existingKeys = new Set(
+            selectedFiles.map((file) => `${file.name.toLowerCase()}__${file.size}__${file.lastModified}`)
+          );
+          Array.from(files || []).forEach((file) => {
+            const key = `${file.name.toLowerCase()}__${file.size}__${file.lastModified}`;
+            if (!existingKeys.has(key)) {
+              selectedFiles.push(file);
+              existingKeys.add(key);
+            }
+          });
+          syncInputFiles();
+          renderFiles();
+        };
+
+        fileInput.addEventListener("change", () => {
+          addFiles(fileInput.files);
+        });
+
+        ["dragenter", "dragover"].forEach((eventName) => {
+          dropzone.addEventListener(eventName, (event) => {
+            event.preventDefault();
+            dropzone.classList.add("dragover");
+          });
+        });
+
+        ["dragleave", "dragend", "drop"].forEach((eventName) => {
+          dropzone.addEventListener(eventName, (event) => {
+            event.preventDefault();
+            if (eventName === "drop") {
+              addFiles(event.dataTransfer.files);
+            }
+            dropzone.classList.remove("dragover");
+          });
+        });
+
+        removeButton.addEventListener("click", () => {
+          const checked = Array.from(document.querySelectorAll(".upload-select:checked"))
+            .map((input) => Number.parseInt(input.dataset.index || "", 10))
+            .filter((value) => Number.isInteger(value))
+            .sort((a, b) => b - a);
+
+          checked.forEach((index) => {
+            selectedFiles.splice(index, 1);
+          });
+
+          syncInputFiles();
+          renderFiles();
+        });
+
+        renderFiles();
+      })();
+    </script>
   </body>
 </html>
-

@@ -1,0 +1,8 @@
+{
+  "CaseID": "coCaseId",
+  "SpecDT": "coSpecimen_datetime",
+  "Na": "coSodium_mmol_L",
+  "Na_flag": "coSodium_flag",
+  "K": "coPotassium_mmol_L",
+  "Creat": "coCreatinine_mg_dL"
+}
