@@ -1,0 +1,10 @@
+{
+  "date": "coTimestamp",
+  "id": "coPatient_id",
+  "fall": "coFall_event_0_1",
+  "mag_impact": "coImpact_magnitude_g",
+  "min_immob": "coPost_fall_immobility_minutes",
+  "num_ex": "coBed_exit_detected_0_1",
+  "num_mov": "coMicro_movements_count",
+  "idx_mov": "coMovement_index_0_100"
+}

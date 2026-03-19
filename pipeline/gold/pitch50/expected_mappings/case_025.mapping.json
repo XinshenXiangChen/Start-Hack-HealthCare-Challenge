@@ -1,0 +1,11 @@
+{
+  "DATE_AD": "coAdmission_date",
+  "ID_CAS": "coCaseId",
+  "WARD": "coWard",
+  "D_M": "coSecondary_icd10_codes",
+  "D_M_STR": "cpSecondary_icd10_descriptions_en",
+  "D_S": "coPrimary_icd10_code",
+  "D_S_STR": "coPrimary_icd10_description_en",
+  "PROC": "coOps_codes",
+  "PROC_STR": "ops_descriptions_en"
+}

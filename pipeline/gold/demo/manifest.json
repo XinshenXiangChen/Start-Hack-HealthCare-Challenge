@@ -1,0 +1,15 @@
+{
+  "meta": {
+    "kind": "self_contained_demo",
+    "description": "Small in-repo demo dataset for the webapp evaluation flow."
+  },
+  "cases": [
+    {
+      "id": "demo_labs_csv_case",
+      "input_file": "inputs/demo_labs.csv",
+      "expected_table": "tbImportLabsData",
+      "expected_mapping_file": "expected_mappings/demo_labs.mapping.json",
+      "expected_output_file": "expected_outputs/demo_labs.expected.csv"
+    }
+  ]
+}

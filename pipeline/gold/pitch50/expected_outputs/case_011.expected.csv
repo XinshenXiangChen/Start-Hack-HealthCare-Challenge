@@ -1,0 +1,4 @@
+﻿coCaseId,coWard,coAdmission_date,coDischarge_date,coLength_of_stay_days,coPrimary_icd10_code,coPrimary_icd10_description_en,coSecondary_icd10_codes,cpSecondary_icd10_descriptions_en,coOps_codes,ops_descriptions_en
+CASE-0095-01,Neurologie,2025-06-12,08-Jul-2025,26,J44.1,Chronic obstructive pulmonary disease with acute exacerbation,I63.9,"Cerebral infarction, unspecified",8-98f.0,1-910
+CASE-0168-01,Intensivstation,29.10.2025,04-Nov-2025,6,I50.1,Left ventricular failure,I50.1,G20%,Left ventricular failure,Parkinson disease
+CASE-0064-01,Pneumologie,05-Jan-2026,20260119,14,N17.9,"Acute kidney failure, unspecified",,,8-550.1,Early geriatric complex treatment

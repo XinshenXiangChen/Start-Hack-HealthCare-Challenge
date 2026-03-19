@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Review {{ run_id }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
+  </head>
+  <body>
+    <div class="shell">
+      <section class="page-top">
+        <div>
+          <a href="{{ url_for('index') }}" class="back-link">Back to dashboard</a>
+          <span class="eyebrow">Evaluation review</span>
+          <h1>{{ run_id }}</h1>
+          <p>Review file readiness, validation results, and required actions before export.</p>
+        </div>
+      </section>
+
+      {% if run.status == 'error' %}
+        <section class="card">
+          <div class="section-head">
+            <div>
+              <span class="eyebrow">Execution issue</span>
+              <h2>{{ run.title or 'Evaluation failed' }}</h2>
+            </div>
+          </div>
+          {% if run.user_message %}
+            <p>{{ run.user_message }}</p>
+          {% endif %}
+          {% if run.missing_files %}
+            <details class="detail-block" open>
+              <summary>Missing files</summary>
+              <pre class="pre">{{ run.missing_files | tojson(indent=2) }}</pre>
+            </details>
+          {% endif %}
+          <pre class="pre">{{ run.log }}</pre>
+        </section>
+      {% else %}
+        <section class="metrics-strip">
+          <div class="stat-card">
+            <span>Ready</span>
+            <strong>{{ run.ops_summary.ready_cases }}</strong>
+          </div>
+          <div class="stat-card">
+            <span>Flagged</span>
+            <strong>{{ run.ops_summary.flagged_cases }}</strong>
+          </div>
+          <div class="stat-card">
+            <span>Blocked</span>
+            <strong>{{ run.ops_summary.blocked_cases }}</strong>
+          </div>
+          <div class="stat-card">
+            <span>Pending actions</span>
+            <strong>{{ run.ops_summary.pending_actions }}</strong>
+          </div>
+        </section>
+
+        <section class="grid two">
+          <div class="card">
+            <div class="section-head">
+              <div>
+                <span class="eyebrow">Batch summary</span>
+                <h2>Batch summary</h2>
+              </div>
+            </div>
+            <div class="summary-grid">
+              <div><span>Cases total</span><strong>{{ run.summary.cases_total }}</strong></div>
+              <div><span>Executed</span><strong>{{ run.summary.cases_executed }}</strong></div>
+              <div><span>Failed</span><strong>{{ run.summary.cases_failed }}</strong></div>
+              <div><span>Table routing</span><strong>{{ run.summary.table_accuracy | pct }}</strong></div>
+              <div><span>Mean mapping F1</span><strong>{{ run.summary.mean_mapping_f1 | pct }}</strong></div>
+              <div><span>Mean cell accuracy</span><strong>{{ run.summary.mean_cell_accuracy | pct }}</strong></div>
+              <div><span>Mean type validity</span><strong>{{ run.summary.mean_type_valid_rate | pct }}</strong></div>
+              <div><span>Mean required fill</span><strong>{{ run.summary.mean_required_fill_rate | pct }}</strong></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="section-head">
+              <div>
+                <span class="eyebrow">Admin workload</span>
+                <h2>Actions</h2>
+              </div>
+            </div>
+            <div class="summary-grid">
+              <div><span>Accepted</span><strong>{{ run.ops_summary.accepted_cases }}</strong></div>
+              <div><span>Manual fixes</span><strong>{{ run.ops_summary.manual_cases }}</strong></div>
+              <div><span>Replace source</span><strong>{{ run.ops_summary.replace_cases }}</strong></div>
+              <div><span>Discard</span><strong>{{ run.ops_summary.discard_cases }}</strong></div>
+            </div>
+            <div class="chip-row">
+              {% for ext, count in run.ops_summary.source_counts.items() %}
+                <span class="pill soft">{{ ext }}: {{ count }}</span>
+              {% endfor %}
+            </div>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="section-head">
+            <div>
+              <span class="eyebrow">Case review</span>
+              <h2>Case review</h2>
+            </div>
+          </div>
+
+          <div class="case-list">
+            {% for c in run.cases %}
+              <article class="case-card">
+                <div class="case-head">
+                  <div>
+                    <div class="case-title-row">
+                      <h3>{{ c.id }}</h3>
+                      <span class="pill {{ c.health_tone }}">{{ c.health_label }}</span>
+                      {% if c.selected_action %}
+                        <span class="pill soft">Action: {{ c.selected_action }}</span>
+                      {% endif %}
+                    </div>
+                    <p>{{ c.workflow_status }}</p>
+                  </div>
+                  <div class="chip-row">
+                    <span class="pill soft">File: {{ c.input_name }}</span>
+                    <span class="pill soft">Target: {{ c.expected_table or 'Unknown' }}</span>
+                    <span class="pill soft">Detected: {{ c.predicted_table or 'n/a' }}</span>
+                    <span class="pill soft">Alerts: {{ c.anomaly_count }}</span>
+                  </div>
+                </div>
+
+                <div class="case-metrics">
+                  <div class="metric-card">
+                    <span>Quality</span>
+                    <strong>{{ c.quality_pct }}</strong>
+                    <div class="bar"><span class="{{ c.quality_tone }}" style="width: {{ c.quality_score * 100 if c.quality_score is not none else 0 }}%;"></span></div>
+                  </div>
+                  <div class="metric-card">
+                    <span>Required fill</span>
+                    <strong>{{ c.required_fill_pct }}</strong>
+                    <div class="bar"><span class="{{ c.required_fill_tone }}" style="width: {{ c.required_fill_rate * 100 if c.required_fill_rate is not none else 0 }}%;"></span></div>
+                  </div>
+                  <div class="metric-card">
+                    <span>Type check</span>
+                    <strong>{{ c.type_valid_pct }}</strong>
+                    <div class="bar"><span class="{{ c.type_valid_tone }}" style="width: {{ c.type_valid_rate * 100 if c.type_valid_rate is not none else 0 }}%;"></span></div>
+                  </div>
+                  <div class="metric-card">
+                    <span>Mapping F1</span>
+                    <strong>{{ c.mapping_f1_pct }}</strong>
+                    <div class="bar"><span class="{{ c.mapping_f1_tone }}" style="width: {{ c.mapping_f1 * 100 if c.mapping_f1 is not none else 0 }}%;"></span></div>
+                  </div>
+                  <div class="metric-card">
+                    <span>Cell accuracy</span>
+                    <strong>{{ c.cell_accuracy_pct }}</strong>
+                    <div class="bar"><span class="{{ c.cell_accuracy_tone }}" style="width: {{ c.cell_accuracy * 100 if c.cell_accuracy is not none else 0 }}%;"></span></div>
+                  </div>
+                  <div class="metric-card">
+                    <span>Rows</span>
+                    <strong>{{ c.rows_in if c.rows_in is not none else 'n/a' }} / {{ c.rows_out if c.rows_out is not none else 'n/a' }}</strong>
+                    <small>{{ c.profile or 'unknown profile' }}</small>
+                  </div>
+                </div>
+
+                <div class="review-grid">
+                  <div class="review-panel">
+                    <h4>File details</h4>
+                    <dl class="details-grid">
+                      <div><dt>Input path</dt><dd>{{ c.input_file }}</dd></div>
+                      <div><dt>Headers in</dt><dd>{{ c.headers_in if c.headers_in is not none else 'n/a' }}</dd></div>
+                      <div><dt>Mapped columns</dt><dd>{{ c.mapped_columns if c.mapped_columns is not none else 'n/a' }}</dd></div>
+                      <div><dt>Table match</dt><dd>{{ 'Yes' if c.table_match else 'No' if c.table_match is not none else 'n/a' }}</dd></div>
+                    </dl>
+                  </div>
+
+                  <div class="review-panel">
+                    <h4>Action</h4>
+                    <form method="post" action="{{ url_for('update_case_action', run_id=run_id, case_id=c.id) }}" class="action-form">
+                      <label for="action-{{ loop.index }}">Recommended action: {{ c.recommended_action }}</label>
+                      <select id="action-{{ loop.index }}" name="action">
+                        <option value="">No action selected</option>
+                        <option value="accept" {% if c.selected_action == 'accept' %}selected{% endif %}>Accept and export</option>
+                        <option value="manual" {% if c.selected_action == 'manual' %}selected{% endif %}>Enter missing data manually</option>
+                        <option value="replace" {% if c.selected_action == 'replace' %}selected{% endif %}>Replace source file</option>
+                        <option value="discard" {% if c.selected_action == 'discard' %}selected{% endif %}>Discard file</option>
+                      </select>
+                      <label for="note-{{ loop.index }}">Note</label>
+                      <textarea id="note-{{ loop.index }}" name="note" rows="4" placeholder="Add a short note">{{ c.action_note }}</textarea>
+                      <button type="submit">Save action</button>
+                      {% if c.action_updated_at %}
+                        <small>Last updated: {{ c.action_updated_at }}</small>
+                      {% endif %}
+                    </form>
+                  </div>
+                </div>
+
+                {% if c.status != 'ok' %}
+                  <details class="detail-block">
+                    <summary>Execution error</summary>
+                    <pre class="pre">{{ c.error }}</pre>
+                  </details>
+                {% else %}
+                  <div class="detail-grid">
+                    <details class="detail-block">
+                      <summary>Missing required values</summary>
+                      <p>{{ c.required_missing_values if c.required_missing_values is not none else 'n/a' }} required cells missing.</p>
+                      <pre class="pre">{{ c.required_missing_by_column | tojson(indent=2) }}</pre>
+                    </details>
+
+                    <details class="detail-block">
+                      <summary>Type anomalies</summary>
+                      <p>{{ c.type_invalid_examples | length if c.type_invalid_examples else 0 }} sample invalid values captured.</p>
+                      <pre class="pre">{{ c.type_invalid_examples | tojson(indent=2) }}</pre>
+                    </details>
+
+                    <details class="detail-block">
+                      <summary>Mapping details</summary>
+                      <p>
+                        Precision {{ c.mapping_precision | pct }}, recall {{ c.mapping_recall | pct }}, exact
+                        {{ c.mapping_exact_ratio | pct }}.
+                      </p>
+                      <pre class="pre">{{ c.mapping_gold_pred_by_key | tojson(indent=2) }}</pre>
+                    </details>
+
+                    <details class="detail-block">
+                      <summary>Output mismatches</summary>
+                      <p>
+                        {{ c.missing_rows if c.missing_rows is not none else 0 }} missing rows,
+                        {{ c.extra_rows if c.extra_rows is not none else 0 }} extra rows.
+                      </p>
+                      <pre class="pre">{{ c.cell_mismatch_samples | tojson(indent=2) }}</pre>
+                    </details>
+                  </div>
+                {% endif %}
+              </article>
+            {% endfor %}
+          </div>
+        </section>
+      {% endif %}
+    </div>
+  </body>
+</html>

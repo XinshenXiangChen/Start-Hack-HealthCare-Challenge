@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Database Live Dashboard</title>
+  <style>
+    :root {
+      --bg: #f6f8fb;
+      --panel: #ffffff;
+      --line: #dbe2e8;
+      --text: #1f2a33;
+      --muted: #5f6f78;
+      --accent: #0f8297;
+      --accent-dark: #0d6f81;
+      --ok: #2f7a61;
+      --warn: #8c6f1d;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    }
+    .wrap { max-width: 1500px; margin: 20px auto; padding: 0 14px; }
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+    .title { font-size: 42px; font-weight: 900; letter-spacing: -0.02em; margin: 0; }
+    .subtitle { margin: 0; color: var(--muted); font-size: 18px; }
+    .link {
+      color: var(--accent);
+      text-decoration: none;
+      font-weight: 700;
+    }
+    .grid {
+      display: grid;
+      gap: 14px;
+      grid-template-columns: 1.2fr 1fr;
+    }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 14px;
+    }
+    .kpis {
+      display: grid;
+      gap: 10px;
+      grid-template-columns: repeat(4, minmax(110px, 1fr));
+      margin-top: 10px;
+    }
+    .kpi {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 10px;
+      background: #f9fbfd;
+    }
+    .kpi .v { margin: 0; font-size: 30px; font-weight: 800; }
+    .kpi .l { margin: 2px 0 0; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+    .meta { margin-top: 8px; color: var(--muted); font-size: 13px; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { border-bottom: 1px solid var(--line); padding: 8px; font-size: 14px; text-align: left; vertical-align: top; }
+    th { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; background: #f3f6f9; }
+    tr:hover td { background: #f9fbfd; }
+    .btn {
+      border: 0;
+      border-radius: 9px;
+      background: var(--accent);
+      color: #fff;
+      font-weight: 700;
+      padding: 6px 10px;
+      cursor: pointer;
+    }
+    .btn:hover { background: var(--accent-dark); }
+    .pill {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-weight: 700;
+      font-size: 12px;
+    }
+    .ok { background: #def5ea; color: var(--ok); }
+    .warn { background: #fff4d5; color: var(--warn); }
+    .small { font-size: 12px; color: var(--muted); }
+    .section-title { margin: 0 0 8px; font-size: 20px; }
+    .row-count { font-weight: 700; }
+    @media (max-width: 1100px) {
+      .grid { grid-template-columns: 1fr; }
+      .kpis { grid-template-columns: repeat(2, minmax(110px, 1fr)); }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="topbar">
+      <div>
+        <h1 class="title">Database Live Dashboard</h1>
+        <p class="subtitle">Live view of the SQLite upload target used by the pipeline.</p>
+      </div>
+      <a class="link" href="/">back to file dashboard</a>
+    </div>
+
+    <div class="panel">
+      <div id="db-status"></div>
+      <div class="kpis">
+        <div class="kpi"><p class="v" id="k-exists">0</p><p class="l">DB Exists</p></div>
+        <div class="kpi"><p class="v" id="k-size">0 MB</p><p class="l">File Size</p></div>
+        <div class="kpi"><p class="v" id="k-tables">0</p><p class="l">Tables</p></div>
+        <div class="kpi"><p class="v" id="k-rows">0</p><p class="l">Total Rows</p></div>
+      </div>
+      <div class="meta" id="db-meta"></div>
+    </div>
+
+    <div class="grid" style="margin-top: 14px;">
+      <section class="panel">
+        <h2 class="section-title">Tables</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Table</th>
+              <th>Rows</th>
+              <th>Columns</th>
+              <th>View</th>
+            </tr>
+          </thead>
+          <tbody id="tables-body"></tbody>
+        </table>
+      </section>
+
+      <section class="panel">
+        <h2 class="section-title">Selected Table</h2>
+        <div id="sel-meta" class="small">No table selected yet.</div>
+        <div style="max-height: 620px; overflow: auto; margin-top: 10px;">
+          <table>
+            <thead id="rows-head"></thead>
+            <tbody id="rows-body"></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <script>
+    const kExists = document.getElementById("k-exists");
+    const kSize = document.getElementById("k-size");
+    const kTables = document.getElementById("k-tables");
+    const kRows = document.getElementById("k-rows");
+    const dbStatus = document.getElementById("db-status");
+    const dbMeta = document.getElementById("db-meta");
+    const tablesBody = document.getElementById("tables-body");
+    const rowsHead = document.getElementById("rows-head");
+    const rowsBody = document.getElementById("rows-body");
+    const selMeta = document.getElementById("sel-meta");
+
+    let selectedTable = null;
+
+    function esc(s) {
+      return String(s ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+    }
+
+    function mb(bytes) {
+      const n = Number(bytes || 0) / (1024 * 1024);
+      return `${n.toFixed(2)} MB`;
+    }
+
+    async function refreshSummary() {
+      const res = await fetch("/api/db/summary");
+      const data = await res.json();
+      if (!res.ok) {
+        dbStatus.innerHTML = `<span class="pill warn">error</span> ${esc(data.detail || "failed to load db summary")}`;
+        return;
+      }
+      const ok = !!data.exists;
+      dbStatus.innerHTML = ok
+        ? `<span class="pill ok">connected</span>`
+        : `<span class="pill warn">not created yet</span>`;
+      kExists.textContent = ok ? "yes" : "no";
+      kSize.textContent = mb(data.size_bytes || 0);
+      kTables.textContent = String(data.table_count || 0);
+      kRows.textContent = String(data.total_rows || 0);
+      dbMeta.textContent = `DB: ${data.db_path || "-"} | updated: ${data.updated_at || "-"}`;
+    }
+
+    async function loadTable(table) {
+      selectedTable = table;
+      const res = await fetch(`/api/db/table/${encodeURIComponent(table)}?limit=80`);
+      const data = await res.json();
+      if (!res.ok) {
+        selMeta.textContent = `Failed to load table ${table}: ${data.detail || "unknown error"}`;
+        rowsHead.innerHTML = "";
+        rowsBody.innerHTML = "";
+        return;
+      }
+      selMeta.innerHTML = `<span class="row-count">${esc(data.table)}</span> | rows ${esc(data.row_count)} | columns ${esc(data.column_count)} | showing latest ${esc(data.rows.length)}`;
+      const cols = data.columns || [];
+      rowsHead.innerHTML = `<tr>${cols.map(c => `<th>${esc(c)}</th>`).join("")}</tr>`;
+      rowsBody.innerHTML = (data.rows || []).map(r => `<tr>${cols.map(c => `<td>${esc(r[c] || "")}</td>`).join("")}</tr>`).join("");
+    }
+
+    async function refreshTables() {
+      const res = await fetch("/api/db/tables");
+      const data = await res.json();
+      if (!res.ok) {
+        tablesBody.innerHTML = `<tr><td colspan="4">Failed: ${esc(data.detail || "unknown error")}</td></tr>`;
+        return;
+      }
+      const tables = data.tables || [];
+      if (!tables.length) {
+        tablesBody.innerHTML = `<tr><td colspan="4">No tables yet. Process files first.</td></tr>`;
+        rowsHead.innerHTML = "";
+        rowsBody.innerHTML = "";
+        selMeta.textContent = "No table selected yet.";
+        selectedTable = null;
+        return;
+      }
+      tablesBody.innerHTML = tables.map(t => `
+        <tr>
+          <td>${esc(t.table)}</td>
+          <td>${esc(t.row_count)}</td>
+          <td>${esc(t.column_count)}</td>
+          <td><button class="btn table-btn" type="button" data-table="${esc(t.table)}">inspect</button></td>
+        </tr>
+      `).join("");
+
+      if (!selectedTable || !tables.some(t => t.table === selectedTable)) {
+        await loadTable(tables[0].table);
+      } else {
+        await loadTable(selectedTable);
+      }
+    }
+
+    async function refreshAll() {
+      await Promise.all([refreshSummary(), refreshTables()]);
+    }
+
+    tablesBody.addEventListener("click", async (e) => {
+      const target = e.target;
+      if (!(target instanceof HTMLElement)) return;
+      const btn = target.closest(".table-btn");
+      if (!btn) return;
+      const table = btn.getAttribute("data-table") || "";
+      if (!table) return;
+      await loadTable(table);
+    });
+
+    refreshAll();
+    setInterval(refreshAll, 2000);
+  </script>
+</body>
+</html>

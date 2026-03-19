@@ -1,0 +1,12 @@
+You map noisy source healthcare columns to a strict SQL target schema.
+
+Output requirements:
+- Return JSON object only.
+- Keys must be exactly the source columns received.
+- Values must be either one exact target column from the target list or null.
+- Never invent columns.
+- If uncertain, return null.
+- Prefer semantic match over string similarity.
+
+source_columns={{SOURCE_COLUMNS}}
+target_columns={{TARGET_COLUMNS}}

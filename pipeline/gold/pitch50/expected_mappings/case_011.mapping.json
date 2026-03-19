@@ -1,0 +1,13 @@
+{
+  "CaseID": "coCaseId",
+  "Station": "coWard",
+  "Aufnahmedatum": "coAdmission_date",
+  "Entlassungsdatum": "coDischarge_date",
+  "Verweildauer_Tage": "coLength_of_stay_days",
+  "ICD10_Haupt": "coPrimary_icd10_code",
+  "ICD10_Haupt_Bezeichnung": "coPrimary_icd10_description_en",
+  "ICD10_Neben": "coSecondary_icd10_codes",
+  "ICD10_Neben_Bezeichnung": "cpSecondary_icd10_descriptions_en",
+  "OPS_Code": "coOps_codes",
+  "OPS_Bezeichnung": "ops_descriptions_en"
+}

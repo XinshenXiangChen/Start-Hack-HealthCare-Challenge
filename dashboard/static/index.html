@@ -1,0 +1,951 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Healthcare Standardization Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #f6f7f2;
+      --surface: #ffffff;
+      --ink: #12212a;
+      --ink-soft: #5f6f78;
+      --ok: #0f8a5f;
+      --err: #c23d3d;
+      --run: #ac7a00;
+      --line: #dbe2e8;
+      --accent: #007a8f;
+      --accent-soft: #d5f5ff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Space Grotesk", "Avenir Next", "Segoe UI", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(1200px 520px at 100% 0%, #d8f4ff 0%, transparent 50%),
+        radial-gradient(900px 450px at -10% -10%, #ffeecb 0%, transparent 44%),
+        var(--bg);
+    }
+    .wrap { max-width: 1200px; margin: 28px auto 60px; padding: 0 18px; }
+    .hero {
+      display: grid;
+      grid-template-columns: 1.1fr .9fr;
+      gap: 16px;
+      margin-bottom: 14px;
+    }
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 18px;
+      box-shadow: 0 12px 30px rgba(18, 33, 42, 0.06);
+    }
+    .title { margin: 0; font-size: 30px; line-height: 1.1; letter-spacing: -0.02em; }
+    .subtitle { margin: 8px 0 0; color: var(--ink-soft); font-size: 15px; }
+    .kpis { display: grid; grid-template-columns: repeat(7, 1fr); gap: 10px; margin-top: 14px; }
+    .kpi { background: #f9fbfd; border: 1px solid var(--line); border-radius: 12px; padding: 11px; }
+    .kpi .v { font-size: 24px; font-weight: 700; margin: 0; }
+    .kpi .l { font-size: 12px; color: var(--ink-soft); margin: 2px 0 0; text-transform: uppercase; letter-spacing: .04em; }
+    form { display: grid; gap: 10px; }
+    .dropzone {
+      border: 1px dashed var(--line);
+      border-radius: 10px;
+      padding: 14px;
+      background: #fafcfe;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 120ms ease, background 120ms ease;
+    }
+    .dropzone.dragover {
+      border-color: var(--accent);
+      background: #eefbff;
+    }
+    .dropzone input[type="file"] { display: none; }
+    .upload-table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+    .upload-table th, .upload-table td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: left; font-size: 13px; }
+    .upload-table th { background: #f3f7fa; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: #48606d; }
+    .upload-table th:first-child, .upload-table td:first-child { width: 64px; text-align: center; }
+    .upload-controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
+    .pagination-settings { display: flex; gap: 8px; align-items: center; }
+    .pagination-settings input { width: 72px; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--line); }
+    .pagination-controls { display: flex; gap: 6px; align-items: center; }
+    input[type="text"] { width: 100%; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; background: #fff; }
+    button {
+      border: 0;
+      border-radius: 10px;
+      padding: 10px 14px;
+      font-weight: 700;
+      cursor: pointer;
+      background: var(--accent);
+      color: #fff;
+    }
+    button.reset {
+      background: #c23d3d;
+    }
+    button.mini {
+      padding: 6px 9px;
+      border-radius: 8px;
+      font-size: 12px;
+      background: #1f6e83;
+    }
+    .meta { color: var(--ink-soft); font-size: 13px; margin-top: 10px; }
+    table { width: 100%; border-collapse: collapse; background: var(--surface); border-radius: 12px; overflow: hidden; }
+    th, td { padding: 10px 12px; border-bottom: 1px solid var(--line); text-align: left; font-size: 14px; vertical-align: top; }
+    th { background: #f3f7fa; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: #48606d; }
+    .chip { display: inline-block; border-radius: 999px; padding: 3px 8px; font-size: 12px; font-weight: 700; }
+    .chip.ok { background: #dff6ee; color: var(--ok); }
+    .chip.error { background: #fde3e3; color: var(--err); }
+    .chip.running { background: #fff2cf; color: var(--run); }
+    .chip.queued { background: #e9eef3; color: #466178; }
+    .small { color: var(--ink-soft); font-size: 12px; }
+    a.dl { color: var(--accent); text-decoration: none; font-weight: 700; }
+    .modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(16, 27, 34, 0.55);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 18px;
+      z-index: 40;
+    }
+    .modal.open { display: flex; }
+    .modal-card {
+      width: min(1200px, 96vw);
+      max-height: 92vh;
+      overflow: auto;
+      background: #fff;
+      border-radius: 14px;
+      border: 1px solid var(--line);
+      box-shadow: 0 18px 40px rgba(0,0,0,0.18);
+      padding: 14px;
+    }
+    .modal-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .subpanel { border: 1px solid var(--line); border-radius: 12px; padding: 10px; overflow: auto; }
+    .subpanel h3 { margin: 0 0 8px; font-size: 15px; }
+    .subtable { width: 100%; border-collapse: collapse; }
+    .subtable th, .subtable td { border: 1px solid var(--line); padding: 6px; font-size: 12px; vertical-align: top; }
+    .muted { color: #5f6f78; font-size: 12px; }
+    .nan-pill {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: #fde3e3;
+      color: var(--err);
+      font-weight: 700;
+      font-size: 12px;
+      letter-spacing: .01em;
+    }
+    @media (max-width: 980px) {
+      .hero { grid-template-columns: 1fr; }
+      .kpis { grid-template-columns: repeat(2, 1fr); }
+      th:nth-child(3), td:nth-child(3),
+      th:nth-child(10), td:nth-child(10) { display: none; }
+      .grid2 { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="hero">
+      <section class="panel">
+        <h1 class="title">Live Standardization Dashboard</h1>
+        <p class="subtitle">Incoming files are detected, standardized through your LLM pipeline, then exported as target-schema CSV.</p>
+        <div class="kpis">
+          <div class="kpi"><p class="v" id="k-total">0</p><p class="l">Total Jobs</p></div>
+          <div class="kpi"><p class="v" id="k-queued">0</p><p class="l">Queued</p></div>
+          <div class="kpi"><p class="v" id="k-running">0</p><p class="l">Running</p></div>
+          <div class="kpi"><p class="v" id="k-ok">0</p><p class="l">Succeeded</p></div>
+          <div class="kpi"><p class="v" id="k-err">0</p><p class="l">Failed</p></div>
+          <div class="kpi"><p class="v" id="k-linked-entities">0</p><p class="l">Linked Entities</p></div>
+          <div class="kpi"><p class="v" id="k-linked-rows">0</p><p class="l">Linked Rows</p></div>
+        </div>
+      </section>
+      <section class="panel">
+        <form id="upload-form">
+          <label for="files">Upload files</label>
+          <label class="dropzone" id="dropzone" for="files">
+            Drag & drop files here or click to select
+            <input id="files" name="files" type="file" multiple />
+          </label>
+          <table class="upload-table">
+            <thead>
+              <tr>
+                <th>Select</th>
+                <th>File</th>
+                <th>Size</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="upload-list">
+              <tr><td colspan="4" class="small">No files selected.</td></tr>
+            </tbody>
+          </table>
+          <div class="upload-controls">
+            <div class="pagination-settings">
+              <label for="max-rows" class="small">Max rows</label>
+              <input id="max-rows" type="number" min="1" step="1" value="5" />
+            </div>
+            <div class="pagination-controls">
+              <button id="prev-page" type="button" class="mini">←</button>
+              <span id="page-status" class="small">Page 1 of 1</span>
+              <button id="next-page" type="button" class="mini">→</button>
+            </div>
+            <button id="remove-selected" type="button" class="mini reset">Remove selected</button>
+          </div>
+          <button type="submit">Upload To Intake Queue</button>
+        </form>
+        <div style="margin-top:10px;display:flex;gap:8px;align-items:center;">
+          <button id="reset-btn" class="reset" type="button">Reset Dashboard</button>
+          <a class="dl" href="/db">open database live</a>
+          <label style="font-size:12px;color:#5f6f78;">
+            <input id="purge-files" type="checkbox" />
+            also delete runtime files
+          </label>
+        </div>
+        <p id="upload-status" class="meta"></p>
+        <div class="meta" id="cfg" style="display:none;"></div>
+      </section>
+    </div>
+    <section class="panel">
+      <table>
+        <thead>
+          <tr>
+            <th>Status</th>
+            <th>Input</th>
+            <th>Table</th>
+            <th>Rows</th>
+            <th>Quality</th>
+            <th>Mapped</th>
+            <th>Semantic</th>
+            <th>Linked</th>
+            <th>View</th>
+            <th>Output</th>
+            <th>Error</th>
+          </tr>
+        </thead>
+        <tbody id="jobs"></tbody>
+      </table>
+    </section>
+    <section class="panel" style="margin-top:14px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+        <strong>Cross-file Entity Links</strong>
+        <div style="display:flex;gap:8px;align-items:center;min-width:min(600px,100%);">
+          <input id="entity-query" type="text" placeholder="Search entity id, case id, patient id..." />
+          <button id="entity-search" type="button" class="mini">Search</button>
+        </div>
+      </div>
+      <table style="margin-top:10px;">
+        <thead>
+          <tr>
+            <th>Entity</th>
+            <th>Keys</th>
+            <th>Tables</th>
+            <th>Rows</th>
+            <th>Samples</th>
+            <th>View</th>
+          </tr>
+        </thead>
+        <tbody id="entities"></tbody>
+      </table>
+    </section>
+  </div>
+
+  <div id="compare-modal" class="modal" aria-hidden="true">
+    <div class="modal-card">
+      <div class="modal-head">
+        <div>
+          <strong>Before / After Preview</strong>
+          <div id="cmp-meta" class="muted"></div>
+        </div>
+        <button id="close-modal" type="button" class="reset">Close</button>
+      </div>
+      <div class="grid2" style="margin-top:10px;">
+        <section class="subpanel">
+          <h3>Before (Source)</h3>
+          <div id="cmp-before-meta" class="muted"></div>
+          <div id="cmp-before"></div>
+        </section>
+        <section class="subpanel">
+          <h3>After (Standardized)</h3>
+          <div id="cmp-after-meta" class="muted"></div>
+          <div id="cmp-after"></div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <div id="quality-modal" class="modal" aria-hidden="true">
+    <div class="modal-card">
+      <div class="modal-head">
+        <div>
+          <strong>Data Quality Review</strong>
+          <div id="quality-meta" class="muted"></div>
+        </div>
+        <button id="close-quality-modal" type="button" class="reset">Close</button>
+      </div>
+      <section class="subpanel" style="margin-top:10px;">
+        <h3>Summary</h3>
+        <div id="quality-summary"></div>
+        <label class="small" style="display:inline-flex;gap:6px;align-items:center;margin-top:8px;">
+          <input id="quality-only-anomalies" type="checkbox" checked />
+          show only columns with anomalies
+        </label>
+      </section>
+      <div class="grid2" style="margin-top:10px;">
+        <section class="subpanel">
+          <h3>Missing Required Fields</h3>
+          <div id="quality-missing"></div>
+        </section>
+        <section class="subpanel">
+          <h3>Type Mismatches</h3>
+          <div id="quality-types"></div>
+        </section>
+      </div>
+      <section class="subpanel" style="margin-top:10px;">
+        <h3>NaN Values</h3>
+        <div id="quality-nan"></div>
+      </section>
+    </div>
+  </div>
+
+  <div id="entity-modal" class="modal" aria-hidden="true">
+    <div class="modal-card">
+      <div class="modal-head">
+        <div>
+          <strong>Cross-file Entity Detail</strong>
+          <div id="entity-meta" class="muted"></div>
+        </div>
+        <button id="close-entity-modal" type="button" class="reset">Close</button>
+      </div>
+      <div class="grid2" style="margin-top:10px;">
+        <section class="subpanel">
+          <h3>Entity Keys</h3>
+          <div id="entity-keys"></div>
+        </section>
+        <section class="subpanel">
+          <h3>Table Distribution</h3>
+          <div id="entity-tables"></div>
+        </section>
+      </div>
+      <section class="subpanel" style="margin-top:10px;">
+        <h3>Linked Samples</h3>
+        <div id="entity-samples"></div>
+      </section>
+    </div>
+  </div>
+
+  <script>
+    const jobsEl = document.getElementById("jobs");
+    const cfgEl = document.getElementById("cfg");
+    const uploadStatus = document.getElementById("upload-status");
+    const uploadList = document.getElementById("upload-list");
+    const dropzone = document.getElementById("dropzone");
+    const filesInput = document.getElementById("files");
+    const maxRowsInput = document.getElementById("max-rows");
+    const prevPageBtn = document.getElementById("prev-page");
+    const nextPageBtn = document.getElementById("next-page");
+    const pageStatus = document.getElementById("page-status");
+    const removeSelectedBtn = document.getElementById("remove-selected");
+
+    const basename = (p) => (p || "").split(/[\\/]/).pop();
+    const formatBytes = (bytes) => {
+      if (!Number.isFinite(bytes) || bytes < 1024) return `${bytes || 0} B`;
+      const units = ["KB", "MB", "GB"];
+      let v = bytes / 1024;
+      let i = 0;
+      while (v >= 1024 && i < units.length - 1) { v /= 1024; i += 1; }
+      return `${v.toFixed(1)} ${units[i]}`;
+    };
+
+    let selectedFiles = [];
+    let currentPage = 1;
+    const syncInputFiles = () => {
+      const dt = new DataTransfer();
+      selectedFiles.forEach(item => dt.items.add(item.file));
+      filesInput.files = dt.files;
+    };
+
+    const getMaxRows = () => {
+      const val = Number.parseInt(maxRowsInput.value || "5", 10);
+      return Number.isInteger(val) && val > 0 ? val : 5;
+    };
+
+    const totalPages = () => {
+      return Math.max(1, Math.ceil(selectedFiles.length / getMaxRows()));
+    };
+
+    const statusChip = (status) => {
+      if (status === "uploaded") return '<span class="chip ok">Uploaded ✓</span>';
+      if (status === "rejected") return '<span class="chip error">Rejected</span>';
+      return '<span class="chip ok">Ready ✓</span>';
+    };
+
+    const renderUploads = () => {
+      if (!uploadList) return;
+      uploadList.innerHTML = "";
+      if (!selectedFiles.length) {
+        uploadList.innerHTML = '<tr><td colspan="4" class="small">No files selected.</td></tr>';
+        pageStatus.textContent = "Page 1 of 1";
+        prevPageBtn.disabled = true;
+        nextPageBtn.disabled = true;
+        return;
+      }
+      const pages = totalPages();
+      currentPage = Math.min(currentPage, pages);
+      const maxRows = getMaxRows();
+      const start = (currentPage - 1) * maxRows;
+      const end = start + maxRows;
+      const slice = selectedFiles.slice(start, end);
+      pageStatus.textContent = `Page ${currentPage} of ${pages}`;
+      prevPageBtn.disabled = currentPage <= 1;
+      nextPageBtn.disabled = currentPage >= pages;
+
+      slice.forEach((item, idx) => {
+        const absoluteIndex = start + idx;
+        const row = document.createElement("tr");
+        row.innerHTML = `
+          <td><input type="checkbox" class="upload-select" data-index="${absoluteIndex}" /></td>
+          <td>${basename(item.file.name)}</td>
+          <td>${formatBytes(item.file.size)}</td>
+          <td>${statusChip(item.status)}</td>
+        `;
+        uploadList.appendChild(row);
+      });
+    };
+
+    const kTotal = document.getElementById("k-total");
+    const kQueued = document.getElementById("k-queued");
+    const kRun = document.getElementById("k-running");
+    const kOk = document.getElementById("k-ok");
+    const kErr = document.getElementById("k-err");
+    const kLinkedEntities = document.getElementById("k-linked-entities");
+    const kLinkedRows = document.getElementById("k-linked-rows");
+    const entitiesEl = document.getElementById("entities");
+    const entityQuery = document.getElementById("entity-query");
+    const compareModal = document.getElementById("compare-modal");
+    const cmpMeta = document.getElementById("cmp-meta");
+    const cmpBefore = document.getElementById("cmp-before");
+    const cmpAfter = document.getElementById("cmp-after");
+    const cmpBeforeMeta = document.getElementById("cmp-before-meta");
+    const cmpAfterMeta = document.getElementById("cmp-after-meta");
+    const qualityModal = document.getElementById("quality-modal");
+    const qualityMeta = document.getElementById("quality-meta");
+    const qualitySummary = document.getElementById("quality-summary");
+    const qualityMissing = document.getElementById("quality-missing");
+    const qualityTypes = document.getElementById("quality-types");
+    const qualityNan = document.getElementById("quality-nan");
+    const qualityOnlyAnomalies = document.getElementById("quality-only-anomalies");
+    const entityModal = document.getElementById("entity-modal");
+    const entityMeta = document.getElementById("entity-meta");
+    const entityKeysEl = document.getElementById("entity-keys");
+    const entityTablesEl = document.getElementById("entity-tables");
+    const entitySamplesEl = document.getElementById("entity-samples");
+
+    function esc(s) {
+      return String(s ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+    }
+
+    function chip(status) {
+      const c = status === "ok" ? "ok" : status === "error" ? "error" : status === "queued" ? "queued" : "running";
+      return `<span class="chip ${c}">${esc(status)}</span>`;
+    }
+
+    function qualityCell(job) {
+      const q = job.profile?.quality || {};
+      const missing = Number(
+        q.missing_values_total ?? q.required_missing_values ?? 0
+      );
+      const invalid = Array.isArray(q.type_invalid_examples) ? q.type_invalid_examples.length : 0;
+      const nan = Number(q.nan_values || 0);
+      const hasIssues = missing > 0 || invalid > 0 || nan > 0;
+      const summary = `missing ${missing} • type mismatches ${invalid} • nan ${nan}`;
+      return `
+        <div>
+          <span class="chip ${hasIssues ? "error" : "ok"}">${hasIssues ? "issues" : "ok"}</span>
+          <div class="small">${summary}</div>
+        </div>
+      `;
+    }
+
+    function formatCellValue(value) {
+      const text = String(value ?? "");
+      if (text.includes("⚠ NaN")) {
+        return '<span class="nan-pill">⚠ NaN</span>';
+      }
+      return esc(text);
+    }
+
+    function renderPreview(pre) {
+      if (!pre) return "<div class='muted'>No preview available</div>";
+      const head = (pre.headers || []).map(h => `<th>${esc(h)}</th>`).join("");
+      const rows = (pre.rows || []).map(r => `<tr>${r.map(v => `<td>${formatCellValue(v)}</td>`).join("")}</tr>`).join("");
+      return `<table class="subtable"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table>`;
+    }
+
+    function renderQualitySummary(q) {
+      if (!q) return "<div class='muted'>No quality data available.</div>";
+      const missing = Number(q.missing_values_total ?? q.required_missing_values ?? 0);
+      const requiredMissing = Number(q.required_missing_values || 0);
+      const invalid = Array.isArray(q.type_invalid_examples) ? q.type_invalid_examples.length : 0;
+      const nan = Number(q.nan_values || 0);
+      return `
+        <div>
+          <span class="chip ${missing || invalid || nan ? "error" : "ok"}">
+            ${missing || invalid || nan ? "issues detected" : "no issues detected"}
+          </span>
+          <div class="small">Missing values: ${missing} • Type mismatches: ${invalid} • NaN values: ${nan}</div>
+          ${requiredMissing ? `<div class="small">Missing required fields: ${requiredMissing}</div>` : ""}
+        </div>
+      `;
+    }
+
+    function renderMissingTable(q, onlyAnomalies = true) {
+      const cols = q?.missing_by_column || q?.required_missing_by_column || {};
+      let keys = Object.keys(cols || {});
+      if (onlyAnomalies) {
+        keys = keys.filter(k => {
+          const info = cols[k] || {};
+          const missing = Number(info.missing || 0);
+          const total = Number(info.total || 0);
+          return missing > 0 && total > 0;
+        });
+      }
+      if (!keys.length) {
+        return onlyAnomalies
+          ? "<div class='muted'>No missing values detected in this dataset.</div>"
+          : "<div class='muted'>No required columns or no rows loaded.</div>";
+      }
+      const rows = keys.map(k => {
+        const info = cols[k] || {};
+        const missing = Number(info.missing || 0);
+        const total = Number(info.total || 0);
+        const pct = total ? Math.round((missing / total) * 100) : 0;
+        return `<tr><td>${esc(k)}</td><td>${missing}</td><td>${total}</td><td>${pct}%</td></tr>`;
+      }).join("");
+      return `<table class="subtable"><thead><tr><th>Column</th><th>Missing</th><th>Total</th><th>%</th></tr></thead><tbody>${rows}</tbody></table>`;
+    }
+
+    function renderTypeInvalid(q) {
+      const items = Array.isArray(q?.type_invalid_examples) ? q.type_invalid_examples : [];
+      if (!items.length) return "<div class='muted'>No type mismatches detected.</div>";
+      const rows = items.map(it => `<tr>
+        <td>${esc(it.row_index)}</td>
+        <td>${esc(it.column)}</td>
+        <td>${esc(it.sql_type)}</td>
+        <td>${esc(it.value)}</td>
+      </tr>`).join("");
+      return `<table class="subtable"><thead><tr><th>Row</th><th>Column</th><th>Expected</th><th>Value</th></tr></thead><tbody>${rows}</tbody></table>`;
+    }
+
+    function renderNanSamples(q) {
+      const items = Array.isArray(q?.nan_samples) ? q.nan_samples : [];
+      if (!items.length) return "<div class='muted'>No NaN values detected.</div>";
+      const rows = items.map(it => `<tr>
+        <td>${esc(it.row_index)}</td>
+        <td>${esc(it.column)}</td>
+        <td><span class="nan-pill">⚠ NaN</span></td>
+      </tr>`).join("");
+      return `<table class="subtable"><thead><tr><th>Row</th><th>Column</th><th>Value</th></tr></thead><tbody>${rows}</tbody></table>`;
+    }
+
+    function renderKeyMap(keysObj) {
+      const keys = Object.keys(keysObj || {});
+      if (!keys.length) return "<div class='muted'>No entity keys found.</div>";
+      const rows = keys.map(k => `<tr><td>${esc(k)}</td><td>${esc((keysObj[k] || []).join(", "))}</td></tr>`).join("");
+      return `<table class="subtable"><thead><tr><th>Key</th><th>Values</th></tr></thead><tbody>${rows}</tbody></table>`;
+    }
+
+    function renderTableCounts(tableCounts) {
+      const keys = Object.keys(tableCounts || {});
+      if (!keys.length) return "<div class='muted'>No table links yet.</div>";
+      const rows = keys
+        .sort((a, b) => Number(tableCounts[b] || 0) - Number(tableCounts[a] || 0))
+        .map(t => `<tr><td>${esc(t)}</td><td>${esc(tableCounts[t])}</td><td><a class="dl" href="/api/download-linked/${encodeURIComponent(t)}">linked csv</a></td></tr>`)
+        .join("");
+      return `<table class="subtable"><thead><tr><th>Table</th><th>Rows</th><th>Download</th></tr></thead><tbody>${rows}</tbody></table>`;
+    }
+
+    function renderEntitySamples(samples) {
+      if (!samples || !samples.length) return "<div class='muted'>No samples captured yet.</div>";
+      const rows = samples.map(s => {
+        const preview = Object.entries(s.preview || {}).map(([k, v]) => `${k}: ${v}`).join(" | ");
+        return `<tr>
+          <td>${esc(s.table || "-")}</td>
+          <td>${esc(s.row_index || "-")}</td>
+          <td>${esc(s.job_id || "-")}</td>
+          <td class="small">${esc(basename(s.input_file || "-"))}</td>
+          <td>${esc(s.match_method || "-")}</td>
+          <td>${esc(preview)}</td>
+        </tr>`;
+      }).join("");
+      return `<table class="subtable"><thead><tr><th>Table</th><th>Row</th><th>Job</th><th>Source</th><th>Match</th><th>Preview</th></tr></thead><tbody>${rows}</tbody></table>`;
+    }
+
+    async function openEntity(entityId) {
+      entityMeta.textContent = "Loading...";
+      entityKeysEl.innerHTML = "";
+      entityTablesEl.innerHTML = "";
+      entitySamplesEl.innerHTML = "";
+      entityModal.classList.add("open");
+      entityModal.setAttribute("aria-hidden", "false");
+      const res = await fetch(`/api/entity/${encodeURIComponent(entityId)}`);
+      const data = await res.json();
+      if (!res.ok) {
+        entityMeta.textContent = `Failed: ${data.detail || "unknown error"}`;
+        return;
+      }
+      entityMeta.textContent =
+        `entity ${data.entity_id} | rows ${data.row_count || 0} | jobs ${(data.jobs || []).length} | last seen ${data.last_seen || "-"}`;
+      entityKeysEl.innerHTML = renderKeyMap(data.keys);
+      entityTablesEl.innerHTML = renderTableCounts(data.table_counts || {});
+      entitySamplesEl.innerHTML = renderEntitySamples(data.samples || []);
+    }
+
+    async function refreshEntities() {
+      const q = (entityQuery.value || "").trim();
+      const res = await fetch(`/api/entities?limit=30&q=${encodeURIComponent(q)}`);
+      const data = await res.json();
+      if (!res.ok) {
+        entitiesEl.innerHTML = `<tr><td colspan="6" class="small">Failed to load entities: ${esc(data.detail || "unknown error")}</td></tr>`;
+        return;
+      }
+      const entities = data.entities || [];
+      if (!entities.length) {
+        const total = Number(data.total_entities || 0);
+        const msg = q
+          ? `No linked entities found for filter "${q}".`
+          : (total > 0 ? `No entities in current view. Total linked entities: ${total}.` : "No linked entities yet.");
+        entitiesEl.innerHTML = `<tr><td colspan="6" class="small">${esc(msg)}</td></tr>`;
+        return;
+      }
+      entitiesEl.innerHTML = entities.map(ent => {
+        const keySummary = Object.entries(ent.keys || {}).slice(0, 2).map(([k, v]) => `${k}: ${(v || []).slice(0, 2).join(", ")}`).join(" | ");
+        const tableSummary = Object.entries(ent.table_counts || {}).map(([t, c]) => `${t} (${c})`).join(", ");
+        return `<tr>
+          <td>${esc(ent.entity_id)}</td>
+          <td class="small">${esc(keySummary || "-")}</td>
+          <td class="small">${esc(tableSummary || "-")}</td>
+          <td>${esc(ent.row_count || 0)}</td>
+          <td>${esc(ent.sample_count || 0)}</td>
+          <td><button class="mini" type="button" onclick="openEntity('${ent.entity_id}')">inspect</button></td>
+        </tr>`;
+      }).join("");
+    }
+
+    async function openCompare(jobId) {
+      cmpMeta.textContent = "Loading...";
+      cmpBefore.innerHTML = "";
+      cmpAfter.innerHTML = "";
+      cmpBeforeMeta.textContent = "";
+      cmpAfterMeta.textContent = "";
+      compareModal.classList.add("open");
+      compareModal.setAttribute("aria-hidden", "false");
+      const res = await fetch(`/api/compare/${jobId}?rows=12&cols=12`);
+      const data = await res.json();
+      if (!res.ok) {
+        const msg = res.status === 404
+          ? "Compare endpoint/job not found. Backend may be outdated; restart dashboard from latest branch."
+          : (data.detail || "unknown error");
+        cmpMeta.textContent = `Failed: ${msg}`;
+        return;
+      }
+      cmpMeta.innerHTML =
+        `job <b>${esc(data.job_id)}</b> | status <b>${esc(data.status)}</b> | table <b>${esc(data.table || "-")}</b> | ` +
+        `<a class="dl" href="${esc(data.download_input_url)}">download input</a> ` +
+        (data.download_output_url ? `| <a class="dl" href="${esc(data.download_output_url)}">download output</a>` : "");
+      cmpBeforeMeta.textContent = data.before_error
+        ? `Before error: ${data.before_error}`
+        : `rows ${data.before.total_rows}, cols ${data.before.total_cols}${data.before.truncated_rows || data.before.truncated_cols ? " (preview truncated)" : ""}`;
+      cmpAfterMeta.textContent = data.after_error
+        ? `After error: ${data.after_error}`
+        : `rows ${data.after.total_rows}, cols ${data.after.total_cols}${data.after.truncated_rows || data.after.truncated_cols ? " (preview truncated)" : ""}`;
+      cmpBefore.innerHTML = renderPreview(data.before);
+      cmpAfter.innerHTML = renderPreview(data.after);
+    }
+
+    let lastQualityPayload = null;
+    function refreshQualityTables() {
+      const q = lastQualityPayload;
+      const only = !!qualityOnlyAnomalies?.checked;
+      qualityMissing.innerHTML = renderMissingTable(q, only);
+      qualityTypes.innerHTML = renderTypeInvalid(q);
+      qualityNan.innerHTML = renderNanSamples(q);
+    }
+
+    async function openQuality(jobId) {
+      qualityMeta.textContent = "Loading...";
+      qualitySummary.innerHTML = "";
+      qualityMissing.innerHTML = "";
+      qualityTypes.innerHTML = "";
+      qualityNan.innerHTML = "";
+      qualityModal.classList.add("open");
+      qualityModal.setAttribute("aria-hidden", "false");
+      const res = await fetch(`/api/compare/${jobId}?rows=12&cols=12`);
+      const data = await res.json();
+      if (!res.ok) {
+        qualityMeta.textContent = `Failed: ${data.detail || "unknown error"}`;
+        return;
+      }
+      const q = data.quality || null;
+      lastQualityPayload = q;
+      qualityMeta.innerHTML = `job <b>${esc(data.job_id)}</b> | table <b>${esc(data.table || "-")}</b>`;
+      qualitySummary.innerHTML = renderQualitySummary(q);
+      refreshQualityTables();
+    }
+
+    async function rerunJob(jobId) {
+      uploadStatus.textContent = `Requeueing job ${jobId}...`;
+      const res = await fetch(`/api/rerun/${encodeURIComponent(jobId)}`, { method: "POST" });
+      const data = await res.json();
+      uploadStatus.textContent = res.ok
+        ? `Rerun queued: source ${data.source_job_id} -> new job ${data.job_id} (queued: ${data.queued ? "yes" : "no"})`
+        : `Rerun failed: ${data.detail || "unknown error"}`;
+      await refresh();
+    }
+
+    async function downloadBulkSql(jobId) {
+      const table = prompt("Target import table name (e.g. tbImportLabsData):", "");
+      if (!table) return;
+      const url = `/api/bulk-sql/${encodeURIComponent(jobId)}?table=${encodeURIComponent(table)}&db_schema=dbo`;
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${jobId}_load_${table}.sql`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }
+
+    async function loadToSqlite(jobId, table) {
+      if (!table) {
+        uploadStatus.textContent = `SQLite load failed: job has no detected table.`;
+        return;
+      }
+      uploadStatus.textContent = `Loading job ${jobId} into SQLite table ${table}...`;
+      const res = await fetch(`/api/load-sqlite/${encodeURIComponent(jobId)}?table=${encodeURIComponent(table)}`, {
+        method: "POST"
+      });
+      const data = await res.json();
+      uploadStatus.textContent = res.ok
+        ? `Loaded ${data.rows_inserted} row(s) into SQLite table ${data.table}.`
+        : `SQLite load failed: ${data.detail || "unknown error"}`;
+    }
+
+    async function refresh() {
+      const [sumRes, jobsRes] = await Promise.all([
+        fetch("/api/summary"),
+        fetch("/api/jobs?limit=300")
+      ]);
+      const summary = await sumRes.json();
+      const data = await jobsRes.json();
+      kTotal.textContent = summary.total_jobs;
+      kQueued.textContent = summary.queued_jobs;
+      kRun.textContent = summary.running_jobs;
+      kOk.textContent = summary.ok_jobs;
+      kErr.textContent = summary.error_jobs;
+      kLinkedEntities.textContent = summary.linked_entities ?? 0;
+      kLinkedRows.textContent = summary.linked_rows ?? 0;
+      cfgEl.innerHTML = "";
+
+      jobsEl.innerHTML = (data.jobs || []).map(j => {
+        const rows = (j.rows_in ?? "-") + "/" + (j.rows_out ?? "-");
+        const sem = j.semantic_extraction_used ? `yes (${j.semantic_rows_enriched})` : "no";
+        const linked = `${j.linked_rows || 0} (${j.linked_entities_touched || 0} ent)`;
+      const rerun = (j.status === "ok" || j.status === "error")
+          ? `<button class="mini" type="button" onclick="rerunJob('${j.id}')">rerun</button>`
+          : "";
+        const view = `<button class="mini" type="button" onclick="openCompare('${j.id}')">visualize</button>
+          <button class="mini" type="button" onclick="openQuality('${j.id}')">anomalies</button>
+          ${rerun}`;
+        const out = j.output_file ? `<a class="dl" href="/api/download/${j.id}">download</a>` : "-";
+        return `<tr>
+          <td>${chip(j.status)}</td>
+          <td>${esc(basename(j.input_file))}<div class="small">${esc(j.created_at)}</div></td>
+          <td>${esc(j.table || "-")}</td>
+          <td>${esc(rows)}</td>
+          <td>${qualityCell(j)}</td>
+          <td>${esc(j.mapped_columns ?? "-")}</td>
+          <td>${esc(sem)}</td>
+          <td>${esc(linked)}</td>
+          <td>${view}</td>
+          <td>
+            ${out}
+            ${j.output_file ? `<br><button class="mini" type="button" onclick="downloadBulkSql('${j.id}')">db script</button>` : ""}
+            ${j.output_file ? `<br><button class="mini" type="button" onclick="loadToSqlite('${j.id}', '${j.table || ''}')">to sqlite</button>` : ""}
+          </td>
+          <td class="small">${esc(j.error || "")}</td>
+        </tr>`;
+      }).join("");
+      await refreshEntities();
+    }
+
+    document.getElementById("upload-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      if (!selectedFiles.length) return;
+      uploadStatus.textContent = `Uploading ${selectedFiles.length} file(s)...`;
+      const fd = new FormData();
+      selectedFiles.forEach(item => fd.append("files", item.file));
+      const res = await fetch("/api/upload", { method: "POST", body: fd });
+      const data = await res.json();
+      if (res.ok) {
+        const accepted = (data.results || []).filter(r => r.status === "accepted");
+        const rejected = (data.results || []).filter(r => r.status !== "accepted");
+        uploadStatus.textContent = `Uploaded ${accepted.length} file(s)` +
+          (rejected.length ? `, ${rejected.length} rejected` : "") + ".";
+        const byName = new Map((data.results || []).map(r => [basename(r.filename), r.status]));
+        selectedFiles = selectedFiles.map(item => {
+          const nextStatus = byName.get(basename(item.file.name));
+          if (nextStatus === "accepted") return { ...item, status: "uploaded" };
+          if (nextStatus === "rejected") return { ...item, status: "rejected" };
+          return item;
+        });
+      } else {
+        uploadStatus.textContent = `Upload failed: ${data.detail || "unknown error"}`;
+      }
+      syncInputFiles();
+      renderUploads();
+      await refresh();
+    });
+
+    filesInput.addEventListener("change", (e) => {
+      const incoming = Array.from(e.target.files || []);
+      const existing = new Set(selectedFiles.map(item => `${item.file.name}_${item.file.size}_${item.file.lastModified}`));
+      incoming.forEach(f => {
+        const key = `${f.name}_${f.size}_${f.lastModified}`;
+        if (!existing.has(key)) {
+          selectedFiles.push({ file: f, status: "ready" });
+          existing.add(key);
+        }
+      });
+      syncInputFiles();
+      renderUploads();
+    });
+
+    ["dragenter", "dragover"].forEach(evt => {
+      dropzone.addEventListener(evt, (e) => {
+        e.preventDefault();
+        dropzone.classList.add("dragover");
+      });
+    });
+    ["dragleave", "drop"].forEach(evt => {
+      dropzone.addEventListener(evt, (e) => {
+        e.preventDefault();
+        dropzone.classList.remove("dragover");
+        if (evt === "drop") {
+          const incoming = Array.from(e.dataTransfer.files || []);
+          const existing = new Set(selectedFiles.map(item => `${item.file.name}_${item.file.size}_${item.file.lastModified}`));
+          incoming.forEach(f => {
+            const key = `${f.name}_${f.size}_${f.lastModified}`;
+            if (!existing.has(key)) {
+              selectedFiles.push({ file: f, status: "ready" });
+              existing.add(key);
+            }
+          });
+          syncInputFiles();
+          renderUploads();
+        }
+      });
+    });
+
+    removeSelectedBtn.addEventListener("click", () => {
+      const checked = Array.from(document.querySelectorAll(".upload-select:checked"))
+        .map(el => Number.parseInt(el.dataset.index || "", 10))
+        .filter(n => Number.isInteger(n))
+        .sort((a, b) => b - a);
+      checked.forEach(idx => selectedFiles.splice(idx, 1));
+      currentPage = Math.min(currentPage, totalPages());
+      syncInputFiles();
+      renderUploads();
+    });
+
+    maxRowsInput.addEventListener("change", () => {
+      if (!maxRowsInput.value || Number.parseInt(maxRowsInput.value, 10) < 1) {
+        maxRowsInput.value = "5";
+      }
+      currentPage = 1;
+      renderUploads();
+    });
+
+    prevPageBtn.addEventListener("click", () => {
+      currentPage = Math.max(1, currentPage - 1);
+      renderUploads();
+    });
+
+    nextPageBtn.addEventListener("click", () => {
+      currentPage = Math.min(totalPages(), currentPage + 1);
+      renderUploads();
+    });
+
+    document.getElementById("reset-btn").addEventListener("click", async () => {
+      const purge = document.getElementById("purge-files").checked;
+      const ok = confirm(`Reset dashboard state${purge ? " and delete runtime files" : ""}?`);
+      if (!ok) return;
+      uploadStatus.textContent = "Resetting...";
+      const res = await fetch(`/api/reset?purge_files=${purge ? "true" : "false"}`, { method: "POST" });
+      const data = await res.json();
+      uploadStatus.textContent = res.ok
+        ? `Reset done: jobs=${data.cleared_jobs}, queue=${data.cleared_queue_items}, deleted_files=${data.deleted_files}`
+        : `Reset failed: ${res.status === 404 ? "endpoint not found (restart backend on latest code)" : (data.detail || "unknown error")}`;
+      await refresh();
+    });
+    document.getElementById("entity-search").addEventListener("click", async () => {
+      await refreshEntities();
+    });
+    entityQuery.addEventListener("keydown", async (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        await refreshEntities();
+      }
+    });
+
+    document.getElementById("close-modal").addEventListener("click", () => {
+      compareModal.classList.remove("open");
+      compareModal.setAttribute("aria-hidden", "true");
+    });
+    compareModal.addEventListener("click", (e) => {
+      if (e.target === compareModal) {
+        compareModal.classList.remove("open");
+        compareModal.setAttribute("aria-hidden", "true");
+      }
+    });
+    document.getElementById("close-quality-modal").addEventListener("click", () => {
+      qualityModal.classList.remove("open");
+      qualityModal.setAttribute("aria-hidden", "true");
+    });
+    qualityModal.addEventListener("click", (e) => {
+      if (e.target === qualityModal) {
+        qualityModal.classList.remove("open");
+        qualityModal.setAttribute("aria-hidden", "true");
+      }
+    });
+    qualityOnlyAnomalies?.addEventListener("change", () => {
+      refreshQualityTables();
+    });
+    document.getElementById("close-entity-modal").addEventListener("click", () => {
+      entityModal.classList.remove("open");
+      entityModal.setAttribute("aria-hidden", "true");
+    });
+    entityModal.addEventListener("click", (e) => {
+      if (e.target === entityModal) {
+        entityModal.classList.remove("open");
+        entityModal.setAttribute("aria-hidden", "true");
+      }
+    });
+    window.openCompare = openCompare;
+    window.openQuality = openQuality;
+    window.openEntity = openEntity;
+    window.rerunJob = rerunJob;
+    window.downloadBulkSql = downloadBulkSql;
+    window.loadToSqlite = loadToSqlite;
+
+    renderUploads();
+    refresh();
+    setInterval(refresh, 1200);
+  </script>
+</body>
+</html>

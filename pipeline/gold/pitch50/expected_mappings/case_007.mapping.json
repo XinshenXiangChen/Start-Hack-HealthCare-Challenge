@@ -1,0 +1,8 @@
+{
+  "CaseID": "coCaseId",
+  "PatientID": "coPatient_id",
+  "Ward": "coWard",
+  "ReportDate": "coReport_date",
+  "Shift": "coShift",
+  "NursingNote": "coNursing_note_free_text"
+}
