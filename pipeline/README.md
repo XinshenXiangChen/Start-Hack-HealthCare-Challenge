@@ -24,6 +24,11 @@ LLM fallback prompt template:
 
 - `prompts/column_mapper_prompt.txt`
 
+`standardize.py` uses LLM in three fallback stages:
+- unresolved header-to-target mapping
+- table detection for weak/unknown file metadata
+- semantic extraction from free-text rows when deterministic mapping is sparse
+
 ## Gold / Benchmark Inputs
 
 - `gold/example_manifest.json`

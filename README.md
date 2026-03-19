@@ -10,6 +10,7 @@ This implementation explicitly covers the challenge technology requirements:
   - local LLM-based column-mapping fallback (Ollama/Llama)
 - NLP for free text:
   - free-text extraction from nursing PDF reports
+  - semantic LLM fallback to extract structured target-column values from free-text rows
 - Autonomous data agents and rule-based/learning mapping logic:
   - deterministic alias/rule engine first
   - model fallback only for unresolved mappings
@@ -54,6 +55,11 @@ Supported input formats for `--input-dir`:
 - `.xlsx`
 - `.pdf`
 - `.sql` (SQL dump files with `INSERT INTO ... VALUES ...`)
+
+Free-text behavior:
+
+- If headers are weak/unknown, the pipeline can infer table from content (rules + optional LLM).
+- If mapping is sparse and rows are narrative text, LLM semantic extraction can fill target columns.
 
 Run evaluation:
 

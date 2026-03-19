@@ -30,6 +30,10 @@ SQL_INSERT_RE = re.compile(
     r"insert\s+into\s+([^\s(]+)\s*(?:\((.*?)\))?\s*values\s*(.*?);",
     re.IGNORECASE | re.DOTALL,
 )
+TEXTY_COL_RE = re.compile(
+    r"(text|note|report|comment|summary|desc|description|narrative|observ|befund|anamn|free)",
+    re.IGNORECASE,
+)
 
 
 TABLE_HINTS = {
@@ -40,6 +44,59 @@ TABLE_HINTS = {
     "tbImportMedicationInpatientData": ["medication", "med"],
     "tbImportNursingDailyReportsData": ["nursing", "report"],
     "tbImportAcData": ["epaac", "epaac-data", "einsch"],
+}
+
+CONTENT_HINTS = {
+    "tbImportLabsData": [
+        "sodium",
+        "potassium",
+        "creatinine",
+        "specimen",
+        "glucose",
+        "hemoglobin",
+        "wbc",
+        "platelets",
+        "crp",
+        "lactate",
+    ],
+    "tbImportIcd10Data": [
+        "icd",
+        "ops",
+        "diagnosis",
+        "procedure",
+        "admission",
+        "discharge",
+    ],
+    "tbImportDevice1HzMotionData": [
+        "1hz",
+        "accel",
+        "pressure_zone",
+        "bed_occupied",
+        "movement_score",
+    ],
+    "tbImportDeviceMotionData": [
+        "movement_index",
+        "micro_movements",
+        "bed_exit",
+        "fall_event",
+        "impact",
+    ],
+    "tbImportMedicationInpatientData": [
+        "medication",
+        "atc",
+        "dose",
+        "route",
+        "prescriber",
+        "administration",
+    ],
+    "tbImportNursingDailyReportsData": [
+        "nursing",
+        "shift",
+        "ward",
+        "report",
+        "note",
+    ],
+    "tbImportAcData": ["e2_i_", "epaac", "einschaetzung", "assessment"],
 }
 
 
@@ -633,15 +690,17 @@ def load_pdf_records(path: Path, table: str) -> tuple[list[str], list[dict[str, 
             profile["pdf_mode"] = "table_extract"
             return rows_to_records(table_rows, table, profile)
 
-        text_rows: list[list[str]] = []
+        doc_lines: list[str] = []
         for page in pages:
             text = page.extract_text() or ""
             for line in text.splitlines():
                 clean = line.strip()
                 if clean:
-                    text_rows.append([clean])
-        profile["pdf_mode"] = "line_text_fallback"
-        return rows_to_records(text_rows, table, profile)
+                    doc_lines.append(clean)
+        profile["pdf_mode"] = "document_text_fallback"
+        if not doc_lines:
+            return [], [], profile
+        return rows_to_records([["text"], ["\n".join(doc_lines)]], table, profile)
 
 
 def load_sql_records(path: Path, table: str) -> tuple[list[str], list[dict[str, Any]], dict[str, Any]]:
@@ -758,6 +817,25 @@ def detect_table(
     return None
 
 
+def detect_table_from_records(records: list[dict[str, Any]]) -> str | None:
+    if not records:
+        return None
+    blob_parts: list[str] = []
+    for rec in records[:5]:
+        for _, val in rec.items():
+            s = str(val or "").strip().lower()
+            if s:
+                blob_parts.append(s)
+    blob = " ".join(blob_parts)
+    if not blob:
+        return None
+    scores: dict[str, int] = {}
+    for table, hints in CONTENT_HINTS.items():
+        scores[table] = sum(1 for h in hints if h in blob)
+    best_table = max(scores, key=scores.get)
+    return best_table if scores.get(best_table, 0) >= 2 else None
+
+
 DEFAULT_PROMPT_TEMPLATE = (
     "Map source columns to target SQL columns.\n"
     "Return JSON only.\n"
@@ -766,6 +844,27 @@ DEFAULT_PROMPT_TEMPLATE = (
     "Never invent target columns.\n\n"
     "source_columns={{SOURCE_COLUMNS}}\n"
     "target_columns={{TARGET_COLUMNS}}\n"
+)
+
+DEFAULT_TABLE_DETECT_PROMPT = (
+    "You are routing one healthcare source file to one SQL target table.\n"
+    "Return JSON only in this shape: {\"table\": \"<table_name_or_null>\"}.\n"
+    "Choose only from allowed_tables or null.\n\n"
+    "file_name={{FILE_NAME}}\n"
+    "source_headers={{SOURCE_HEADERS}}\n"
+    "sample_rows={{SAMPLE_ROWS}}\n"
+    "allowed_tables={{ALLOWED_TABLES}}\n"
+)
+
+DEFAULT_EXTRACTION_PROMPT = (
+    "Extract structured SQL column values from clinical free text.\n"
+    "Return JSON object only.\n"
+    "Keys must be from target_columns.\n"
+    "Values must be string or null.\n"
+    "Do not invent facts; if missing, use null.\n\n"
+    "table={{TABLE}}\n"
+    "target_columns={{TARGET_COLUMNS}}\n"
+    "source_text={{SOURCE_TEXT}}\n"
 )
 
 
@@ -817,6 +916,187 @@ def run_llama_mapping(
         return out
     except json.JSONDecodeError:
         return {}
+
+
+def run_llama_table_detection(
+    model: str,
+    path: Path,
+    headers: list[str],
+    records: list[dict[str, Any]],
+    allowed_tables: list[str],
+    timeout_s: int,
+) -> str | None:
+    if not allowed_tables:
+        return None
+    sample_rows = records[:3]
+    prompt = (
+        DEFAULT_TABLE_DETECT_PROMPT.replace("{{FILE_NAME}}", json.dumps(path.name))
+        .replace("{{SOURCE_HEADERS}}", json.dumps(headers[:80], ensure_ascii=False))
+        .replace("{{SAMPLE_ROWS}}", json.dumps(sample_rows, ensure_ascii=False))
+        .replace("{{ALLOWED_TABLES}}", json.dumps(sorted(allowed_tables)))
+    )
+    try:
+        result = subprocess.run(
+            ["ollama", "run", model, prompt],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=timeout_s,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return None
+    text = (result.stdout or "").strip()
+    match = JSON_BLOCK_RE.search(text)
+    if not match:
+        return None
+    try:
+        parsed = json.loads(match.group(0))
+    except json.JSONDecodeError:
+        return None
+    table = parsed.get("table") if isinstance(parsed, dict) else None
+    if table is None:
+        return None
+    table_s = str(table).strip()
+    return table_s if table_s in allowed_tables else None
+
+
+def build_row_extraction_prompt(
+    table: str, target_cols: list[str], source_text: str
+) -> str:
+    return (
+        DEFAULT_EXTRACTION_PROMPT.replace("{{TABLE}}", json.dumps(table))
+        .replace("{{TARGET_COLUMNS}}", json.dumps(target_cols))
+        .replace("{{SOURCE_TEXT}}", json.dumps(source_text[:6000], ensure_ascii=False))
+    )
+
+
+def run_llama_row_extraction(
+    model: str,
+    table: str,
+    target_cols: list[str],
+    source_text: str,
+    timeout_s: int,
+) -> dict[str, str]:
+    if not source_text.strip():
+        return {}
+    prompt = build_row_extraction_prompt(table, target_cols, source_text)
+    try:
+        result = subprocess.run(
+            ["ollama", "run", model, prompt],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=timeout_s,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return {}
+    text = (result.stdout or "").strip()
+    match = JSON_BLOCK_RE.search(text)
+    if not match:
+        return {}
+    try:
+        parsed = json.loads(match.group(0))
+    except json.JSONDecodeError:
+        return {}
+    if not isinstance(parsed, dict):
+        return {}
+    allowed = set(target_cols)
+    out: dict[str, str] = {}
+    for key, value in parsed.items():
+        col = str(key)
+        if col not in allowed or value is None:
+            continue
+        val = str(value).strip()
+        if val:
+            out[col] = val
+    return out
+
+
+def rec_to_text(rec: dict[str, Any], preferred_cols: list[str]) -> str:
+    parts: list[str] = []
+    if preferred_cols:
+        for col in preferred_cols:
+            val = str(rec.get(col, "") or "").strip()
+            if val:
+                parts.append(f"{col}: {val}")
+    else:
+        for col, raw_val in rec.items():
+            val = str(raw_val or "").strip()
+            if val:
+                parts.append(f"{col}: {val}")
+    return "\n".join(parts)
+
+
+def detect_text_columns(headers: list[str], records: list[dict[str, Any]]) -> list[str]:
+    text_cols = [h for h in headers if TEXTY_COL_RE.search(h or "")]
+    if text_cols:
+        return text_cols
+    if not records:
+        return []
+    scored: list[tuple[float, str]] = []
+    for h in headers:
+        lengths = [len(str(r.get(h, "") or "").strip()) for r in records[:30]]
+        non_empty = [n for n in lengths if n > 0]
+        if not non_empty:
+            continue
+        avg_len = sum(non_empty) / len(non_empty)
+        if avg_len >= 40:
+            scored.append((avg_len, h))
+    scored.sort(reverse=True)
+    return [h for _, h in scored[:2]]
+
+
+def should_use_semantic_extraction(
+    headers: list[str],
+    records: list[dict[str, Any]],
+    mapping: dict[str, str],
+) -> bool:
+    if not records:
+        return False
+    if len(records) > 200:
+        return False
+    text_cols = detect_text_columns(headers, records)
+    if text_cols:
+        return True
+    if not headers:
+        return False
+    mapped_ratio = len(mapping) / max(len(headers), 1)
+    return mapped_ratio < 0.2
+
+
+def enrich_rows_with_semantic_extraction(
+    table: str,
+    headers: list[str],
+    records: list[dict[str, Any]],
+    target_cols: list[str],
+    rows: list[dict[str, Any]],
+    model: str,
+    timeout_s: int,
+) -> tuple[list[dict[str, Any]], int]:
+    text_cols = detect_text_columns(headers, records)
+    enriched = 0
+    for idx, rec in enumerate(records):
+        source_text = rec_to_text(rec, text_cols)
+        extracted = run_llama_row_extraction(
+            model=model,
+            table=table,
+            target_cols=target_cols,
+            source_text=source_text,
+            timeout_s=timeout_s,
+        )
+        if not extracted:
+            continue
+        row = rows[idx] if idx < len(rows) else {c: "" for c in target_cols}
+        changed = False
+        for col, val in extracted.items():
+            if not row.get(col):
+                row[col] = val
+                changed = True
+        if idx >= len(rows):
+            rows.append(row)
+        if changed:
+            enriched += 1
+    return rows, enriched
 
 
 def build_mapping(
@@ -924,8 +1204,20 @@ def main() -> None:
     )
     for path in files:
         try:
-            headers_probe, _, profile_probe = load_records(path, "tbImportAcData")
+            headers_probe, records_probe, profile_probe = load_records(path, "tbImportAcData")
             table = detect_table(path, headers_probe, profile_probe)
+            if not table:
+                table = detect_table_from_records(records_probe)
+            if not table and not args.no_llm:
+                allowed_tables = [t for t in schema.keys() if t in TABLE_HINTS]
+                table = run_llama_table_detection(
+                    model=args.model,
+                    path=path,
+                    headers=headers_probe,
+                    records=records_probe,
+                    allowed_tables=allowed_tables or list(schema.keys()),
+                    timeout_s=args.llm_timeout,
+                )
             if not table or table not in schema:
                 report.append(
                     {
@@ -948,6 +1240,19 @@ def main() -> None:
                 prompt_template=prompt_template,
             )
             rows = standardize_records(records, target_cols, mapping)
+            semantic_rows_enriched = 0
+            semantic_used = False
+            if not args.no_llm and should_use_semantic_extraction(headers, records, mapping):
+                rows, semantic_rows_enriched = enrich_rows_with_semantic_extraction(
+                    table=table,
+                    headers=headers,
+                    records=records,
+                    target_cols=target_cols,
+                    rows=rows,
+                    model=args.model,
+                    timeout_s=args.llm_timeout,
+                )
+                semantic_used = True
 
             ext = path.suffix.lower().lstrip(".")
             output_name = f"{path.stem}__{ext}__{table}.csv"
@@ -965,6 +1270,8 @@ def main() -> None:
                     "targets_total": len(target_cols),
                     "mapped_columns": len(mapping),
                     "unmapped_headers": [h for h in headers if h not in mapping],
+                    "semantic_extraction_used": semantic_used,
+                    "semantic_rows_enriched": semantic_rows_enriched,
                     "profile": profile,
                 }
             )
