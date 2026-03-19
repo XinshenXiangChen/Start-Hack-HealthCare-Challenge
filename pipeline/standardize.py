@@ -1007,6 +1007,34 @@ def build_mapping(
     target_set = set(target_cols)
     mapping: dict[str, str] = {}
     alias_table = ALIASES.get(table, {})
+    common_case_keys = {
+        "caseid",
+        "case_id",
+        "fallid",
+        "fall_id",
+        "fall",
+        "cas",
+        "idcas",
+        "id_case",
+    }
+    common_patient_keys = {
+        "pid",
+        "patientid",
+        "patient_id",
+        "patid",
+        "pat_id",
+        "idpat",
+        "id_pat",
+        "pat",
+    }
+    common_encounter_keys = {
+        "encounterid",
+        "encounter_id",
+        "encid",
+        "enc_id",
+        "idenc",
+        "id_enc",
+    }
 
     # 1) Exact normalized match: source -> co<source>
     target_normalized = {normalize(c.removeprefix("co")): c for c in target_cols}
@@ -1017,6 +1045,25 @@ def build_mapping(
             if dest in target_set:
                 mapping[source_col] = dest
                 continue
+        if "coCaseId" in target_set and (
+            src_norm in common_case_keys
+            or src_norm.startswith("fall")
+            or src_norm.startswith("case")
+        ):
+            mapping[source_col] = "coCaseId"
+            continue
+        if "coPatient_id" in target_set and (
+            src_norm in common_patient_keys
+            or src_norm.startswith("patient")
+        ):
+            mapping[source_col] = "coPatient_id"
+            continue
+        if "coEncounter_id" in target_set and (
+            src_norm in common_encounter_keys
+            or src_norm.startswith("encounter")
+        ):
+            mapping[source_col] = "coEncounter_id"
+            continue
         if table == "tbImportAcData":
             codes = EPA_CODE_RE.findall(source_col)
             for code in codes:
