@@ -76,6 +76,25 @@ TOKEN_RE = re.compile(r"[a-z0-9]{3,}")
 JSON_BLOCK_RE = re.compile(r"\{.*\}", re.DOTALL)
 
 
+def parse_bool_env(name: str, default: bool = False) -> bool:
+    text = (os.getenv(name) or "").strip().lower()
+    if not text:
+        return default
+    return text in {"1", "true", "yes", "on"}
+
+
+DEBUG_ROUTING = parse_bool_env("PIPELINE_DEBUG_ROUTING", False)
+
+
+def log_routing_debug(payload: dict[str, Any]) -> None:
+    if not DEBUG_ROUTING:
+        return
+    print(
+        "[routing-debug] " + json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
+        flush=True,
+    )
+
+
 def normalize_entity_value(value: Any) -> str:
     text = "" if value is None else str(value).strip()
     if not text:
@@ -999,13 +1018,20 @@ def detect_table_with_fallback(
     headers: list[str],
     records: list[dict[str, Any]],
     profile: dict[str, Any],
-) -> str | None:
-    table = std.detect_table(path, headers, profile)
+) -> tuple[str | None, dict[str, Any]]:
+    routing_debug: dict[str, Any] = {}
+    table = std.detect_table(path, headers, profile, debug=routing_debug)
     if not table and hasattr(std, "detect_table_from_records"):
-        table = std.detect_table_from_records(records)
+        fb_table = std.detect_table_from_records(records)
+        routing_debug["fallback_records_table"] = fb_table
+        if fb_table:
+            table = fb_table
+            routing_debug["matched_table"] = fb_table
+            routing_debug["matched_by"] = "fallback_records"
+            routing_debug["matched_value"] = "detect_table_from_records"
     if not table and not NO_LLM and hasattr(std, "run_llama_table_detection"):
         allowed_tables = [t for t in state.schema.keys() if t in std.TABLE_HINTS]
-        table = std.run_llama_table_detection(
+        fb_table = std.run_llama_table_detection(
             model=MODEL,
             path=path,
             headers=headers,
@@ -1013,18 +1039,52 @@ def detect_table_with_fallback(
             allowed_tables=allowed_tables or list(state.schema.keys()),
             timeout_s=LLM_TIMEOUT,
         )
-    return table
+        routing_debug["fallback_llm_allowed_tables"] = allowed_tables or list(state.schema.keys())
+        routing_debug["fallback_llm_table"] = fb_table
+        if fb_table:
+            table = fb_table
+            routing_debug["matched_table"] = fb_table
+            routing_debug["matched_by"] = "fallback_llm"
+            routing_debug["matched_value"] = MODEL
+    if not table:
+        routing_debug.setdefault("matched_table", None)
+        routing_debug.setdefault("matched_by", "none")
+        routing_debug.setdefault("matched_value", None)
+    return table, routing_debug
 
 
 async def process_file(path: Path, source: str, job: Job) -> None:
     try:
         headers_probe, records_probe, profile_probe = std.load_records(path, "tbImportAcData")
-        table = detect_table_with_fallback(path, headers_probe, records_probe, profile_probe)
+        table, routing_debug = detect_table_with_fallback(
+            path, headers_probe, records_probe, profile_probe
+        )
         if not table or table not in state.schema:
+            log_routing_debug(
+                {
+                    "job_id": job.id,
+                    "source": source,
+                    "status": "error",
+                    "reason": "table_not_detected_or_not_in_schema",
+                    "routing_debug": routing_debug,
+                }
+            )
             raise ValueError("table_not_detected_or_not_in_schema")
 
         headers, records, profile = std.load_records(path, table)
         target_cols = [c for c in state.schema[table] if c != "coId"]
+        routing_debug["target_cols_count"] = len(target_cols)
+        routing_debug["target_cols_sample"] = target_cols[:12]
+        profile["routing_debug"] = routing_debug
+        log_routing_debug(
+            {
+                "job_id": job.id,
+                "source": source,
+                "status": "ok",
+                "table": table,
+                "routing_debug": routing_debug,
+            }
+        )
         mapping = std.build_mapping(
             table=table,
             headers=headers,
