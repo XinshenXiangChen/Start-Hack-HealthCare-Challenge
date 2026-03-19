@@ -83,6 +83,8 @@ AC_SID_VALUE_COL_KEYS = {
     "val",
     "wert",
 }
+ENTITY_ID_COLS = {"coCaseId", "coCaseIdAlpha", "coPatient_id", "coEncounter_id"}
+NULL_LIKE_TEXT = {"na", "n/a", "nan", "none", "null", "unknown", "-"}
 
 
 ALIASES = {
@@ -602,6 +604,21 @@ def cell_to_str(value: Any) -> str:
     if isinstance(value, time):
         return value.isoformat()
     return str(value)
+
+
+def is_null_like_text(value: Any) -> bool:
+    text = "" if value is None else str(value).strip()
+    if not text:
+        return True
+    return text.lower() in NULL_LIKE_TEXT
+
+
+def sanitize_entity_id_fields(row: dict[str, Any]) -> None:
+    for col in ENTITY_ID_COLS:
+        if col not in row:
+            continue
+        if is_null_like_text(row.get(col)):
+            row[col] = ""
 
 
 def strip_trailing_empty(row: list[str]) -> list[str]:
@@ -1272,6 +1289,10 @@ def standardize_records(
                 dyn_dest = resolve_ac_header_with_iid_dictionary(sid_raw)
                 if dyn_dest and dyn_dest in target_set:
                     out[dyn_dest] = val_raw
+
+        # Keep null-like normalization limited to entity identifiers only.
+        # All non-ID variables preserve their raw mapped values.
+        sanitize_entity_id_fields(out)
 
         out_rows.append(out)
     return out_rows
