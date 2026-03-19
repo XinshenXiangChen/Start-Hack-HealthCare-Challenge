@@ -46,7 +46,7 @@
     }
     .title { margin: 0; font-size: 30px; line-height: 1.1; letter-spacing: -0.02em; }
     .subtitle { margin: 8px 0 0; color: var(--ink-soft); font-size: 15px; }
-    .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 14px; }
+    .kpis { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-top: 14px; }
     .kpi { background: #f9fbfd; border: 1px solid var(--line); border-radius: 12px; padding: 11px; }
     .kpi .v { font-size: 24px; font-weight: 700; margin: 0; }
     .kpi .l { font-size: 12px; color: var(--ink-soft); margin: 2px 0 0; text-transform: uppercase; letter-spacing: .04em; }
@@ -69,6 +69,7 @@
     .chip.ok { background: #dff6ee; color: var(--ok); }
     .chip.error { background: #fde3e3; color: var(--err); }
     .chip.running { background: #fff2cf; color: var(--run); }
+    .chip.queued { background: #e9eef3; color: #466178; }
     .small { color: var(--ink-soft); font-size: 12px; }
     a.dl { color: var(--accent); text-decoration: none; font-weight: 700; }
     @media (max-width: 980px) {
@@ -87,6 +88,7 @@
         <p class="subtitle">Incoming files are detected, standardized through your LLM pipeline, then exported as target-schema CSV.</p>
         <div class="kpis">
           <div class="kpi"><p class="v" id="k-total">0</p><p class="l">Total Jobs</p></div>
+          <div class="kpi"><p class="v" id="k-queued">0</p><p class="l">Queued</p></div>
           <div class="kpi"><p class="v" id="k-running">0</p><p class="l">Running</p></div>
           <div class="kpi"><p class="v" id="k-ok">0</p><p class="l">Succeeded</p></div>
           <div class="kpi"><p class="v" id="k-err">0</p><p class="l">Failed</p></div>
@@ -127,6 +129,7 @@
     const uploadStatus = document.getElementById("upload-status");
 
     const kTotal = document.getElementById("k-total");
+    const kQueued = document.getElementById("k-queued");
     const kRun = document.getElementById("k-running");
     const kOk = document.getElementById("k-ok");
     const kErr = document.getElementById("k-err");
@@ -136,7 +139,7 @@
     }
 
     function chip(status) {
-      const c = status === "ok" ? "ok" : status === "error" ? "error" : "running";
+      const c = status === "ok" ? "ok" : status === "error" ? "error" : status === "queued" ? "queued" : "running";
       return `<span class="chip ${c}">${esc(status)}</span>`;
     }
 
@@ -148,13 +151,14 @@
       const summary = await sumRes.json();
       const data = await jobsRes.json();
       kTotal.textContent = summary.total_jobs;
+      kQueued.textContent = summary.queued_jobs;
       kRun.textContent = summary.running_jobs;
       kOk.textContent = summary.ok_jobs;
       kErr.textContent = summary.error_jobs;
       cfgEl.innerHTML =
         `Input: <b>${esc(summary.input_dir)}</b><br>` +
         `Output: <b>${esc(summary.output_dir)}</b><br>` +
-        `Model: <b>${esc(summary.model)}</b> | LLM: <b>${summary.llm_enabled ? "on" : "off"}</b> | Scan every <b>${summary.scan_seconds}s</b>`;
+        `Model: <b>${esc(summary.model)}</b> | LLM: <b>${summary.llm_enabled ? "on" : "off"}</b> | Workers: <b>${summary.worker_concurrency}</b> | Queue depth: <b>${summary.queue_size}</b> | Scan every <b>${summary.scan_seconds}s</b>`;
 
       jobsEl.innerHTML = (data.jobs || []).map(j => {
         const rows = (j.rows_in ?? "-") + "/" + (j.rows_out ?? "-");
@@ -183,7 +187,7 @@
       const res = await fetch("/api/upload", { method: "POST", body: fd });
       const data = await res.json();
       uploadStatus.textContent = res.ok
-        ? `Uploaded: ${data.saved_to} (scheduled: ${data.scheduled_immediately ? "yes" : "already queued"})`
+        ? `Uploaded: ${data.saved_to} (queued: ${data.queued ? "yes" : "already seen"}) ${data.job_id ? "| job: " + data.job_id : ""}`
         : `Upload failed: ${data.detail || "unknown error"}`;
       document.getElementById("file").value = "";
       await refresh();

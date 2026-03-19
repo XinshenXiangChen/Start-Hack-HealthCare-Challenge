@@ -39,6 +39,7 @@ MODEL = os.getenv("PIPELINE_MODEL", "llama3.2:latest")
 LLM_TIMEOUT = int(os.getenv("PIPELINE_LLM_TIMEOUT", "45"))
 NO_LLM = os.getenv("PIPELINE_NO_LLM", "0").strip().lower() in {"1", "true", "yes"}
 SCAN_SECONDS = int(os.getenv("PIPELINE_SCAN_SECONDS", "5"))
+WORKER_CONCURRENCY = int(os.getenv("PIPELINE_WORKER_CONCURRENCY", "1"))
 
 
 def utc_now() -> str:
@@ -74,20 +75,35 @@ class Job:
     error: str | None = None
 
 
+@dataclass
+class QueueItem:
+    path: Path
+    source: str
+    signature: str
+    job_id: str
+
+
 class State:
     def __init__(self) -> None:
         self.schema = std.parse_schema(SCHEMA_SQL)
         self.jobs: list[Job] = []
         self.jobs_by_id: dict[str, Job] = {}
         self.seen_signatures: set[str] = set()
+        self.queued_signatures: set[str] = set()
         self.running_signatures: set[str] = set()
+        self.queue: asyncio.Queue[QueueItem] = asyncio.Queue()
         self.lock = asyncio.Lock()
         self.scanner_task: asyncio.Task[Any] | None = None
+        self.worker_tasks: list[asyncio.Task[Any]] = []
 
     async def add_job(self, job: Job) -> None:
         async with self.lock:
             self.jobs.append(job)
             self.jobs_by_id[job.id] = job
+
+    async def get_job(self, job_id: str) -> Job | None:
+        async with self.lock:
+            return self.jobs_by_id.get(job_id)
 
     async def update_job(self, job: Job) -> None:
         async with self.lock:
@@ -104,11 +120,15 @@ class State:
             ok = sum(1 for j in self.jobs if j.status == "ok")
             err = sum(1 for j in self.jobs if j.status == "error")
             running = sum(1 for j in self.jobs if j.status == "running")
+            queued = sum(1 for j in self.jobs if j.status == "queued")
         return {
             "total_jobs": total,
             "ok_jobs": ok,
             "error_jobs": err,
             "running_jobs": running,
+            "queued_jobs": queued,
+            "queue_size": self.queue.qsize(),
+            "worker_concurrency": max(1, WORKER_CONCURRENCY),
             "input_dir": str(INPUT_DIR),
             "output_dir": str(OUTPUT_DIR),
             "archive_dir": str(ARCHIVE_DIR),
@@ -134,9 +154,9 @@ def detect_table_with_fallback(
     profile: dict[str, Any],
 ) -> str | None:
     table = std.detect_table(path, headers, profile)
-    if not table:
+    if not table and hasattr(std, "detect_table_from_records"):
         table = std.detect_table_from_records(records)
-    if not table and not NO_LLM:
+    if not table and not NO_LLM and hasattr(std, "run_llama_table_detection"):
         allowed_tables = [t for t in state.schema.keys() if t in std.TABLE_HINTS]
         table = std.run_llama_table_detection(
             model=MODEL,
@@ -149,16 +169,7 @@ def detect_table_with_fallback(
     return table
 
 
-async def process_file(path: Path, source: str) -> None:
-    job = Job(
-        id=uuid.uuid4().hex[:12],
-        status="running",
-        source=source,
-        input_file=str(path),
-        created_at=utc_now(),
-        started_at=utc_now(),
-    )
-    await state.add_job(job)
+async def process_file(path: Path, source: str, job: Job) -> None:
     try:
         headers_probe, records_probe, profile_probe = std.load_records(path, "tbImportAcData")
         table = detect_table_with_fallback(path, headers_probe, records_probe, profile_probe)
@@ -183,7 +194,12 @@ async def process_file(path: Path, source: str) -> None:
 
         semantic_rows_enriched = 0
         semantic_extraction_used = False
-        if not NO_LLM and std.should_use_semantic_extraction(headers, records, mapping):
+        if (
+            not NO_LLM
+            and hasattr(std, "should_use_semantic_extraction")
+            and hasattr(std, "enrich_rows_with_semantic_extraction")
+            and std.should_use_semantic_extraction(headers, records, mapping)
+        ):
             rows, semantic_rows_enriched = std.enrich_rows_with_semantic_extraction(
                 table=table,
                 headers=headers,
@@ -225,24 +241,49 @@ async def process_file(path: Path, source: str) -> None:
         await state.update_job(job)
 
 
-def schedule_processing(path: Path, source: str) -> bool:
+async def enqueue_processing(path: Path, source: str) -> tuple[bool, str | None]:
     try:
         sig = signature(path)
     except FileNotFoundError:
-        return False
-    if sig in state.seen_signatures or sig in state.running_signatures:
-        return False
-    state.running_signatures.add(sig)
+        return False, None
+    if (
+        sig in state.seen_signatures
+        or sig in state.running_signatures
+        or sig in state.queued_signatures
+    ):
+        return False, None
 
-    async def _run(p: Path, s: str, sig_value: str) -> None:
+    job = Job(
+        id=uuid.uuid4().hex[:12],
+        status="queued",
+        source=source,
+        input_file=str(path),
+        created_at=utc_now(),
+    )
+    await state.add_job(job)
+    state.queued_signatures.add(sig)
+    await state.queue.put(QueueItem(path=path, source=source, signature=sig, job_id=job.id))
+    return True, job.id
+
+
+async def worker_loop(worker_id: int) -> None:
+    _ = worker_id
+    while True:
+        item = await state.queue.get()
         try:
-            await process_file(p, s)
+            state.queued_signatures.discard(item.signature)
+            state.running_signatures.add(item.signature)
+            job = await state.get_job(item.job_id)
+            if job is None:
+                continue
+            job.status = "running"
+            job.started_at = utc_now()
+            await state.update_job(job)
+            await process_file(item.path, item.source, job)
         finally:
-            state.running_signatures.discard(sig_value)
-            state.seen_signatures.add(sig_value)
-
-    asyncio.create_task(_run(path, source, sig))
-    return True
+            state.running_signatures.discard(item.signature)
+            state.seen_signatures.add(item.signature)
+            state.queue.task_done()
 
 
 async def scanner_loop() -> None:
@@ -251,7 +292,7 @@ async def scanner_loop() -> None:
             for path in sorted(INPUT_DIR.rglob("*")):
                 if not path.is_file() or path.suffix.lower() not in SUPPORTED_EXT:
                     continue
-                schedule_processing(path, "watcher")
+                await enqueue_processing(path, "watcher")
         except Exception:
             pass
         await asyncio.sleep(max(1, SCAN_SECONDS))
@@ -266,6 +307,9 @@ async def on_startup() -> None:
     ensure_dirs()
     if state.scanner_task is None:
         state.scanner_task = asyncio.create_task(scanner_loop())
+    if not state.worker_tasks:
+        for i in range(max(1, WORKER_CONCURRENCY)):
+            state.worker_tasks.append(asyncio.create_task(worker_loop(i)))
 
 
 @app.on_event("shutdown")
@@ -274,6 +318,12 @@ async def on_shutdown() -> None:
         state.scanner_task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await state.scanner_task
+    for task in state.worker_tasks:
+        task.cancel()
+    for task in state.worker_tasks:
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
+    state.worker_tasks.clear()
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -302,8 +352,13 @@ async def api_upload(file: UploadFile = File(...)) -> dict[str, Any]:
     dst = INPUT_DIR / f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{safe_name(file.filename or 'upload')}"
     with dst.open("wb") as f:
         shutil.copyfileobj(file.file, f)
-    scheduled = schedule_processing(dst, "upload")
-    return {"status": "accepted", "saved_to": str(dst), "scheduled_immediately": scheduled}
+    scheduled, job_id = await enqueue_processing(dst, "upload")
+    return {
+        "status": "accepted",
+        "saved_to": str(dst),
+        "queued": scheduled,
+        "job_id": job_id,
+    }
 
 
 @app.get("/api/download/{job_id}")

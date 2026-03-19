@@ -74,6 +74,12 @@ python pipeline.py dashboard --host 0.0.0.0 --port 8000
 Dashboard behavior:
 
 - Watches `runtime/incoming` for new files.
+- Queues each file and processes it with worker(s) (FIFO queue).
 - Standardizes each file to `runtime/standardized`.
 - Moves processed inputs to `runtime/processed`.
 - Provides upload + status UI at `http://localhost:8000`.
+
+Queue controls (optional env vars):
+
+- `PIPELINE_WORKER_CONCURRENCY` (default `1`): number of concurrent workers.
+- `PIPELINE_SCAN_SECONDS` (default `5`): watcher scan interval.
