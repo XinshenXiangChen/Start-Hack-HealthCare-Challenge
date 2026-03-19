@@ -211,3 +211,4 @@ pipeline/out/
 pipeline/gold/benchmark50_silver/
 pipeline/gold/benchmark50_silver_fast/
 pipeline/gold/manual15/
+runtime/
