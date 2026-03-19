@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 
@@ -28,6 +28,7 @@ if str(PIPELINE_DIR) not in sys.path:
     sys.path.insert(0, str(PIPELINE_DIR))
 
 import standardize as std  # type: ignore  # noqa: E402
+from .db_sqlite import load_standardized_csv_into_sqlite  # type: ignore  # noqa: E402
 
 
 SUPPORTED_EXT = {".csv", ".xlsx", ".pdf", ".sql"}
@@ -1070,6 +1071,15 @@ async def process_file(path: Path, source: str, job: Job) -> None:
         std.write_csv(output_path, rows, target_cols)
         job.output_file = str(output_path)
 
+        # Automatically load standardized output into the local SQLite DB.
+        # This removes the need for the user to click "to sqlite".
+        sqlite_rows_inserted: int | None = None
+        sqlite_load_error: str | None = None
+        try:
+            sqlite_rows_inserted = load_standardized_csv_into_sqlite(output_path, table)
+        except Exception as sqlite_exc:  # pragma: no cover
+            sqlite_load_error = str(sqlite_exc)
+
         linked_rows = 0
         linked_entities_touched = 0
         try:
@@ -1098,6 +1108,10 @@ async def process_file(path: Path, source: str, job: Job) -> None:
         job.linked_rows = linked_rows
         job.linked_entities_touched = linked_entities_touched
         profile["active_output_columns"] = active_output_columns
+        if sqlite_rows_inserted is not None:
+            profile["sqlite_rows_inserted"] = sqlite_rows_inserted
+        if sqlite_load_error:
+            profile["sqlite_load_error"] = sqlite_load_error
         job.profile = profile
         job.finished_at = utc_now()
         await state.update_job(job)
@@ -1317,6 +1331,86 @@ async def api_download_input(job_id: str) -> FileResponse:
     if path is None:
         raise HTTPException(status_code=404, detail="input file missing")
     return FileResponse(path=str(path), filename=path.name)
+
+
+@app.post("/api/load-sqlite/{job_id}")
+async def api_load_sqlite(job_id: str, table: str | None = None) -> dict[str, Any]:
+    """
+    Load a job's standardized CSV directly into a local SQLite DB using SQLAlchemy.
+    If `table` isn't provided, it uses `job.table` (detected during standardization).
+    """
+
+    job = state.jobs_by_id.get(job_id)
+    if not job or not job.output_file:
+        raise HTTPException(status_code=404, detail="job/output not found")
+
+    table = (table or "").strip() or (job.table or "").strip()
+    if not table:
+        raise HTTPException(status_code=400, detail="target table not provided and job.table is missing")
+
+    csv_path = Path(job.output_file)
+    if not csv_path.exists():
+        raise HTTPException(status_code=404, detail="standardized CSV missing on disk")
+
+    try:
+        rows_inserted = load_standardized_csv_into_sqlite(csv_path, table)
+    except Exception as exc:  # pragma: no cover - defensive
+        raise HTTPException(status_code=500, detail=str(exc))
+
+    return {"status": "ok", "rows_inserted": rows_inserted, "table": table}
+
+
+@app.get("/api/bulk-sql/{job_id}")
+async def api_bulk_sql(job_id: str, table: str, db_schema: str = "dbo") -> Response:
+    """
+    Generate a SQL Server BULK INSERT script for the standardized CSV of a job.
+
+    The frontend is expected to:
+    - Let the user pick the target import table (e.g. tbImportLabsData)
+    - Call this endpoint with that table name
+    - Offer the downloaded .sql file for execution in SSMS
+    """
+    job = state.jobs_by_id.get(job_id)
+    if not job or not job.output_file:
+        raise HTTPException(status_code=404, detail="job/output not found")
+
+    csv_path = Path(job.output_file)
+    if not csv_path.exists():
+        raise HTTPException(status_code=404, detail="standardized CSV missing on disk")
+
+    table_full = f"[{db_schema}].[{table}]"
+    data_path = str(csv_path.resolve()).replace("/", "\\")
+
+    def esc(val: str) -> str:
+        return val.replace("'", "''")
+
+    sql_lines = [
+        "-- Auto-generated BULK INSERT for one standardized CSV",
+        "-- Make sure this path is reachable from the SQL Server machine.",
+        "",
+        "SET NOCOUNT ON;",
+        "",
+        f"PRINT 'Loading {esc(csv_path.name)} into {table_full}';",
+        f"TRUNCATE TABLE {table_full};",
+        "BULK INSERT {table}\n"
+        "FROM '{path}'\n"
+        "WITH (\n"
+        "  FIRSTROW = 2,\n"
+        "  FIELDTERMINATOR = ',',\n"
+        "  ROWTERMINATOR = '0x0a',\n"
+        "  TABLOCK,\n"
+        "  KEEPNULLS,\n"
+        "  CODEPAGE = '65001'\n"
+        ");".format(table=table_full, path=esc(data_path)),
+        "",
+    ]
+    sql_text = "\n".join(sql_lines)
+
+    filename = f"{job.id}_load_{table}.sql"
+    headers = {
+        "Content-Disposition": f'attachment; filename="{filename}"'
+    }
+    return Response(content=sql_text, media_type="application/sql", headers=headers)
 
 
 @app.get("/api/compare/{job_id}")

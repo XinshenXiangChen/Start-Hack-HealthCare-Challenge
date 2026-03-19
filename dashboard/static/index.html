@@ -412,6 +412,33 @@
       await refresh();
     }
 
+    async function downloadBulkSql(jobId) {
+      const table = prompt("Target import table name (e.g. tbImportLabsData):", "");
+      if (!table) return;
+      const url = `/api/bulk-sql/${encodeURIComponent(jobId)}?table=${encodeURIComponent(table)}&db_schema=dbo`;
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${jobId}_load_${table}.sql`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }
+
+    async function loadToSqlite(jobId, table) {
+      if (!table) {
+        uploadStatus.textContent = `SQLite load failed: job has no detected table.`;
+        return;
+      }
+      uploadStatus.textContent = `Loading job ${jobId} into SQLite table ${table}...`;
+      const res = await fetch(`/api/load-sqlite/${encodeURIComponent(jobId)}?table=${encodeURIComponent(table)}`, {
+        method: "POST"
+      });
+      const data = await res.json();
+      uploadStatus.textContent = res.ok
+        ? `Loaded ${data.rows_inserted} row(s) into SQLite table ${data.table}.`
+        : `SQLite load failed: ${data.detail || "unknown error"}`;
+    }
+
     async function refresh() {
       const [sumRes, jobsRes] = await Promise.all([
         fetch("/api/summary"),
@@ -451,7 +478,11 @@
           <td>${esc(sem)}</td>
           <td>${esc(linked)}</td>
           <td>${view}</td>
-          <td>${out}</td>
+          <td>
+            ${out}
+            ${j.output_file ? `<br><button class="mini" type="button" onclick="downloadBulkSql('${j.id}')">db script</button>` : ""}
+            ${j.output_file ? `<br><button class="mini" type="button" onclick="loadToSqlite('${j.id}', '${j.table || ''}')">to sqlite</button>` : ""}
+          </td>
           <td class="small">${esc(j.error || "")}</td>
         </tr>`;
       }).join("");
@@ -519,6 +550,8 @@
     window.openCompare = openCompare;
     window.openEntity = openEntity;
     window.rerunJob = rerunJob;
+    window.downloadBulkSql = downloadBulkSql;
+    window.loadToSqlite = loadToSqlite;
 
     refresh();
     setInterval(refresh, 1200);
