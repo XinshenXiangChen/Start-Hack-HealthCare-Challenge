@@ -51,7 +51,28 @@
     .kpi .v { font-size: 24px; font-weight: 700; margin: 0; }
     .kpi .l { font-size: 12px; color: var(--ink-soft); margin: 2px 0 0; text-transform: uppercase; letter-spacing: .04em; }
     form { display: grid; gap: 10px; }
-    input[type="file"] { width: 100%; border: 1px dashed var(--line); border-radius: 10px; padding: 10px; background: #fafcfe; }
+    .dropzone {
+      border: 1px dashed var(--line);
+      border-radius: 10px;
+      padding: 14px;
+      background: #fafcfe;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 120ms ease, background 120ms ease;
+    }
+    .dropzone.dragover {
+      border-color: var(--accent);
+      background: #eefbff;
+    }
+    .dropzone input[type="file"] { display: none; }
+    .upload-table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+    .upload-table th, .upload-table td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: left; font-size: 13px; }
+    .upload-table th { background: #f3f7fa; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: #48606d; }
+    .upload-table th:first-child, .upload-table td:first-child { width: 64px; text-align: center; }
+    .upload-controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
+    .pagination-settings { display: flex; gap: 8px; align-items: center; }
+    .pagination-settings input { width: 72px; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--line); }
+    .pagination-controls { display: flex; gap: 6px; align-items: center; }
     input[type="text"] { width: 100%; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; background: #fff; }
     button {
       border: 0;
@@ -110,11 +131,21 @@
     .subtable { width: 100%; border-collapse: collapse; }
     .subtable th, .subtable td { border: 1px solid var(--line); padding: 6px; font-size: 12px; vertical-align: top; }
     .muted { color: #5f6f78; font-size: 12px; }
+    .nan-pill {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: #fde3e3;
+      color: var(--err);
+      font-weight: 700;
+      font-size: 12px;
+      letter-spacing: .01em;
+    }
     @media (max-width: 980px) {
       .hero { grid-template-columns: 1fr; }
       .kpis { grid-template-columns: repeat(2, 1fr); }
       th:nth-child(3), td:nth-child(3),
-      th:nth-child(9), td:nth-child(9) { display: none; }
+      th:nth-child(10), td:nth-child(10) { display: none; }
       .grid2 { grid-template-columns: 1fr; }
     }
   </style>
@@ -137,8 +168,36 @@
       </section>
       <section class="panel">
         <form id="upload-form">
-          <label for="file">Push one file directly</label>
-          <input id="file" name="file" type="file" required />
+          <label for="files">Upload files</label>
+          <label class="dropzone" id="dropzone" for="files">
+            Drag & drop files here or click to select
+            <input id="files" name="files" type="file" multiple />
+          </label>
+          <table class="upload-table">
+            <thead>
+              <tr>
+                <th>Select</th>
+                <th>File</th>
+                <th>Size</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="upload-list">
+              <tr><td colspan="4" class="small">No files selected.</td></tr>
+            </tbody>
+          </table>
+          <div class="upload-controls">
+            <div class="pagination-settings">
+              <label for="max-rows" class="small">Max rows</label>
+              <input id="max-rows" type="number" min="1" step="1" value="5" />
+            </div>
+            <div class="pagination-controls">
+              <button id="prev-page" type="button" class="mini">←</button>
+              <span id="page-status" class="small">Page 1 of 1</span>
+              <button id="next-page" type="button" class="mini">→</button>
+            </div>
+            <button id="remove-selected" type="button" class="mini reset">Remove selected</button>
+          </div>
           <button type="submit">Upload To Intake Queue</button>
         </form>
         <div style="margin-top:10px;display:flex;gap:8px;align-items:center;">
@@ -150,7 +209,7 @@
           </label>
         </div>
         <p id="upload-status" class="meta"></p>
-        <div class="meta" id="cfg"></div>
+        <div class="meta" id="cfg" style="display:none;"></div>
       </section>
     </div>
     <section class="panel">
@@ -161,6 +220,7 @@
             <th>Input</th>
             <th>Table</th>
             <th>Rows</th>
+            <th>Quality</th>
             <th>Mapped</th>
             <th>Semantic</th>
             <th>Linked</th>
@@ -220,6 +280,40 @@
     </div>
   </div>
 
+  <div id="quality-modal" class="modal" aria-hidden="true">
+    <div class="modal-card">
+      <div class="modal-head">
+        <div>
+          <strong>Data Quality Review</strong>
+          <div id="quality-meta" class="muted"></div>
+        </div>
+        <button id="close-quality-modal" type="button" class="reset">Close</button>
+      </div>
+      <section class="subpanel" style="margin-top:10px;">
+        <h3>Summary</h3>
+        <div id="quality-summary"></div>
+        <label class="small" style="display:inline-flex;gap:6px;align-items:center;margin-top:8px;">
+          <input id="quality-only-anomalies" type="checkbox" checked />
+          show only columns with anomalies
+        </label>
+      </section>
+      <div class="grid2" style="margin-top:10px;">
+        <section class="subpanel">
+          <h3>Missing Required Fields</h3>
+          <div id="quality-missing"></div>
+        </section>
+        <section class="subpanel">
+          <h3>Type Mismatches</h3>
+          <div id="quality-types"></div>
+        </section>
+      </div>
+      <section class="subpanel" style="margin-top:10px;">
+        <h3>NaN Values</h3>
+        <div id="quality-nan"></div>
+      </section>
+    </div>
+  </div>
+
   <div id="entity-modal" class="modal" aria-hidden="true">
     <div class="modal-card">
       <div class="modal-head">
@@ -250,6 +344,80 @@
     const jobsEl = document.getElementById("jobs");
     const cfgEl = document.getElementById("cfg");
     const uploadStatus = document.getElementById("upload-status");
+    const uploadList = document.getElementById("upload-list");
+    const dropzone = document.getElementById("dropzone");
+    const filesInput = document.getElementById("files");
+    const maxRowsInput = document.getElementById("max-rows");
+    const prevPageBtn = document.getElementById("prev-page");
+    const nextPageBtn = document.getElementById("next-page");
+    const pageStatus = document.getElementById("page-status");
+    const removeSelectedBtn = document.getElementById("remove-selected");
+
+    const basename = (p) => (p || "").split(/[\\/]/).pop();
+    const formatBytes = (bytes) => {
+      if (!Number.isFinite(bytes) || bytes < 1024) return `${bytes || 0} B`;
+      const units = ["KB", "MB", "GB"];
+      let v = bytes / 1024;
+      let i = 0;
+      while (v >= 1024 && i < units.length - 1) { v /= 1024; i += 1; }
+      return `${v.toFixed(1)} ${units[i]}`;
+    };
+
+    let selectedFiles = [];
+    let currentPage = 1;
+    const syncInputFiles = () => {
+      const dt = new DataTransfer();
+      selectedFiles.forEach(item => dt.items.add(item.file));
+      filesInput.files = dt.files;
+    };
+
+    const getMaxRows = () => {
+      const val = Number.parseInt(maxRowsInput.value || "5", 10);
+      return Number.isInteger(val) && val > 0 ? val : 5;
+    };
+
+    const totalPages = () => {
+      return Math.max(1, Math.ceil(selectedFiles.length / getMaxRows()));
+    };
+
+    const statusChip = (status) => {
+      if (status === "uploaded") return '<span class="chip ok">Uploaded ✓</span>';
+      if (status === "rejected") return '<span class="chip error">Rejected</span>';
+      return '<span class="chip ok">Ready ✓</span>';
+    };
+
+    const renderUploads = () => {
+      if (!uploadList) return;
+      uploadList.innerHTML = "";
+      if (!selectedFiles.length) {
+        uploadList.innerHTML = '<tr><td colspan="4" class="small">No files selected.</td></tr>';
+        pageStatus.textContent = "Page 1 of 1";
+        prevPageBtn.disabled = true;
+        nextPageBtn.disabled = true;
+        return;
+      }
+      const pages = totalPages();
+      currentPage = Math.min(currentPage, pages);
+      const maxRows = getMaxRows();
+      const start = (currentPage - 1) * maxRows;
+      const end = start + maxRows;
+      const slice = selectedFiles.slice(start, end);
+      pageStatus.textContent = `Page ${currentPage} of ${pages}`;
+      prevPageBtn.disabled = currentPage <= 1;
+      nextPageBtn.disabled = currentPage >= pages;
+
+      slice.forEach((item, idx) => {
+        const absoluteIndex = start + idx;
+        const row = document.createElement("tr");
+        row.innerHTML = `
+          <td><input type="checkbox" class="upload-select" data-index="${absoluteIndex}" /></td>
+          <td>${basename(item.file.name)}</td>
+          <td>${formatBytes(item.file.size)}</td>
+          <td>${statusChip(item.status)}</td>
+        `;
+        uploadList.appendChild(row);
+      });
+    };
 
     const kTotal = document.getElementById("k-total");
     const kQueued = document.getElementById("k-queued");
@@ -266,6 +434,13 @@
     const cmpAfter = document.getElementById("cmp-after");
     const cmpBeforeMeta = document.getElementById("cmp-before-meta");
     const cmpAfterMeta = document.getElementById("cmp-after-meta");
+    const qualityModal = document.getElementById("quality-modal");
+    const qualityMeta = document.getElementById("quality-meta");
+    const qualitySummary = document.getElementById("quality-summary");
+    const qualityMissing = document.getElementById("quality-missing");
+    const qualityTypes = document.getElementById("quality-types");
+    const qualityNan = document.getElementById("quality-nan");
+    const qualityOnlyAnomalies = document.getElementById("quality-only-anomalies");
     const entityModal = document.getElementById("entity-modal");
     const entityMeta = document.getElementById("entity-meta");
     const entityKeysEl = document.getElementById("entity-keys");
@@ -281,11 +456,102 @@
       return `<span class="chip ${c}">${esc(status)}</span>`;
     }
 
+    function qualityCell(job) {
+      const q = job.profile?.quality || {};
+      const missing = Number(
+        q.missing_values_total ?? q.required_missing_values ?? 0
+      );
+      const invalid = Array.isArray(q.type_invalid_examples) ? q.type_invalid_examples.length : 0;
+      const nan = Number(q.nan_values || 0);
+      const hasIssues = missing > 0 || invalid > 0 || nan > 0;
+      const summary = `missing ${missing} • type mismatches ${invalid} • nan ${nan}`;
+      return `
+        <div>
+          <span class="chip ${hasIssues ? "error" : "ok"}">${hasIssues ? "issues" : "ok"}</span>
+          <div class="small">${summary}</div>
+        </div>
+      `;
+    }
+
+    function formatCellValue(value) {
+      const text = String(value ?? "");
+      if (text.includes("⚠ NaN")) {
+        return '<span class="nan-pill">⚠ NaN</span>';
+      }
+      return esc(text);
+    }
+
     function renderPreview(pre) {
       if (!pre) return "<div class='muted'>No preview available</div>";
       const head = (pre.headers || []).map(h => `<th>${esc(h)}</th>`).join("");
-      const rows = (pre.rows || []).map(r => `<tr>${r.map(v => `<td>${esc(v)}</td>`).join("")}</tr>`).join("");
+      const rows = (pre.rows || []).map(r => `<tr>${r.map(v => `<td>${formatCellValue(v)}</td>`).join("")}</tr>`).join("");
       return `<table class="subtable"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table>`;
+    }
+
+    function renderQualitySummary(q) {
+      if (!q) return "<div class='muted'>No quality data available.</div>";
+      const missing = Number(q.missing_values_total ?? q.required_missing_values ?? 0);
+      const requiredMissing = Number(q.required_missing_values || 0);
+      const invalid = Array.isArray(q.type_invalid_examples) ? q.type_invalid_examples.length : 0;
+      const nan = Number(q.nan_values || 0);
+      return `
+        <div>
+          <span class="chip ${missing || invalid || nan ? "error" : "ok"}">
+            ${missing || invalid || nan ? "issues detected" : "no issues detected"}
+          </span>
+          <div class="small">Missing values: ${missing} • Type mismatches: ${invalid} • NaN values: ${nan}</div>
+          ${requiredMissing ? `<div class="small">Missing required fields: ${requiredMissing}</div>` : ""}
+        </div>
+      `;
+    }
+
+    function renderMissingTable(q, onlyAnomalies = true) {
+      const cols = q?.missing_by_column || q?.required_missing_by_column || {};
+      let keys = Object.keys(cols || {});
+      if (onlyAnomalies) {
+        keys = keys.filter(k => {
+          const info = cols[k] || {};
+          const missing = Number(info.missing || 0);
+          const total = Number(info.total || 0);
+          return missing > 0 && total > 0;
+        });
+      }
+      if (!keys.length) {
+        return onlyAnomalies
+          ? "<div class='muted'>No missing values detected in this dataset.</div>"
+          : "<div class='muted'>No required columns or no rows loaded.</div>";
+      }
+      const rows = keys.map(k => {
+        const info = cols[k] || {};
+        const missing = Number(info.missing || 0);
+        const total = Number(info.total || 0);
+        const pct = total ? Math.round((missing / total) * 100) : 0;
+        return `<tr><td>${esc(k)}</td><td>${missing}</td><td>${total}</td><td>${pct}%</td></tr>`;
+      }).join("");
+      return `<table class="subtable"><thead><tr><th>Column</th><th>Missing</th><th>Total</th><th>%</th></tr></thead><tbody>${rows}</tbody></table>`;
+    }
+
+    function renderTypeInvalid(q) {
+      const items = Array.isArray(q?.type_invalid_examples) ? q.type_invalid_examples : [];
+      if (!items.length) return "<div class='muted'>No type mismatches detected.</div>";
+      const rows = items.map(it => `<tr>
+        <td>${esc(it.row_index)}</td>
+        <td>${esc(it.column)}</td>
+        <td>${esc(it.sql_type)}</td>
+        <td>${esc(it.value)}</td>
+      </tr>`).join("");
+      return `<table class="subtable"><thead><tr><th>Row</th><th>Column</th><th>Expected</th><th>Value</th></tr></thead><tbody>${rows}</tbody></table>`;
+    }
+
+    function renderNanSamples(q) {
+      const items = Array.isArray(q?.nan_samples) ? q.nan_samples : [];
+      if (!items.length) return "<div class='muted'>No NaN values detected.</div>";
+      const rows = items.map(it => `<tr>
+        <td>${esc(it.row_index)}</td>
+        <td>${esc(it.column)}</td>
+        <td><span class="nan-pill">⚠ NaN</span></td>
+      </tr>`).join("");
+      return `<table class="subtable"><thead><tr><th>Row</th><th>Column</th><th>Value</th></tr></thead><tbody>${rows}</tbody></table>`;
     }
 
     function renderKeyMap(keysObj) {
@@ -313,7 +579,7 @@
           <td>${esc(s.table || "-")}</td>
           <td>${esc(s.row_index || "-")}</td>
           <td>${esc(s.job_id || "-")}</td>
-          <td class="small">${esc(s.input_file || "-")}</td>
+          <td class="small">${esc(basename(s.input_file || "-"))}</td>
           <td>${esc(s.match_method || "-")}</td>
           <td>${esc(preview)}</td>
         </tr>`;
@@ -403,6 +669,36 @@
       cmpAfter.innerHTML = renderPreview(data.after);
     }
 
+    let lastQualityPayload = null;
+    function refreshQualityTables() {
+      const q = lastQualityPayload;
+      const only = !!qualityOnlyAnomalies?.checked;
+      qualityMissing.innerHTML = renderMissingTable(q, only);
+      qualityTypes.innerHTML = renderTypeInvalid(q);
+      qualityNan.innerHTML = renderNanSamples(q);
+    }
+
+    async function openQuality(jobId) {
+      qualityMeta.textContent = "Loading...";
+      qualitySummary.innerHTML = "";
+      qualityMissing.innerHTML = "";
+      qualityTypes.innerHTML = "";
+      qualityNan.innerHTML = "";
+      qualityModal.classList.add("open");
+      qualityModal.setAttribute("aria-hidden", "false");
+      const res = await fetch(`/api/compare/${jobId}?rows=12&cols=12`);
+      const data = await res.json();
+      if (!res.ok) {
+        qualityMeta.textContent = `Failed: ${data.detail || "unknown error"}`;
+        return;
+      }
+      const q = data.quality || null;
+      lastQualityPayload = q;
+      qualityMeta.innerHTML = `job <b>${esc(data.job_id)}</b> | table <b>${esc(data.table || "-")}</b>`;
+      qualitySummary.innerHTML = renderQualitySummary(q);
+      refreshQualityTables();
+    }
+
     async function rerunJob(jobId) {
       uploadStatus.textContent = `Requeueing job ${jobId}...`;
       const res = await fetch(`/api/rerun/${encodeURIComponent(jobId)}`, { method: "POST" });
@@ -454,27 +750,25 @@
       kErr.textContent = summary.error_jobs;
       kLinkedEntities.textContent = summary.linked_entities ?? 0;
       kLinkedRows.textContent = summary.linked_rows ?? 0;
-      cfgEl.innerHTML =
-        `Input: <b>${esc(summary.input_dir)}</b><br>` +
-        `Output: <b>${esc(summary.output_dir)}</b><br>` +
-        `Model: <b>${esc(summary.model)}</b> | LLM: <b>${summary.llm_enabled ? "on" : "off"}</b> | Workers: <b>${summary.worker_concurrency}</b> | Queue depth: <b>${summary.queue_size}</b> | Scan every <b>${summary.scan_seconds}s</b><br>` +
-        `IID dictionary: <b>${esc(summary.iid_dictionary || "not loaded")}</b> | Linked dir: <b>${esc(summary.linked_dir || "-")}</b><br>` +
-        `AI linking: <b>${summary.ai_linking_enabled ? "on" : "off"}</b> | AI attempts: <b>${esc(summary.ai_link_attempts ?? 0)}</b> | AI matches: <b>${esc(summary.ai_link_matches ?? 0)}</b>`;
+      cfgEl.innerHTML = "";
 
       jobsEl.innerHTML = (data.jobs || []).map(j => {
         const rows = (j.rows_in ?? "-") + "/" + (j.rows_out ?? "-");
         const sem = j.semantic_extraction_used ? `yes (${j.semantic_rows_enriched})` : "no";
         const linked = `${j.linked_rows || 0} (${j.linked_entities_touched || 0} ent)`;
-        const rerun = (j.status === "ok" || j.status === "error")
+      const rerun = (j.status === "ok" || j.status === "error")
           ? `<button class="mini" type="button" onclick="rerunJob('${j.id}')">rerun</button>`
           : "";
-        const view = `<button class="mini" type="button" onclick="openCompare('${j.id}')">visualize</button> ${rerun}`;
+        const view = `<button class="mini" type="button" onclick="openCompare('${j.id}')">visualize</button>
+          <button class="mini" type="button" onclick="openQuality('${j.id}')">anomalies</button>
+          ${rerun}`;
         const out = j.output_file ? `<a class="dl" href="/api/download/${j.id}">download</a>` : "-";
         return `<tr>
           <td>${chip(j.status)}</td>
-          <td>${esc(j.input_file)}<div class="small">${esc(j.created_at)}</div></td>
+          <td>${esc(basename(j.input_file))}<div class="small">${esc(j.created_at)}</div></td>
           <td>${esc(j.table || "-")}</td>
           <td>${esc(rows)}</td>
+          <td>${qualityCell(j)}</td>
           <td>${esc(j.mapped_columns ?? "-")}</td>
           <td>${esc(sem)}</td>
           <td>${esc(linked)}</td>
@@ -492,18 +786,99 @@
 
     document.getElementById("upload-form").addEventListener("submit", async (e) => {
       e.preventDefault();
-      const file = document.getElementById("file").files[0];
-      if (!file) return;
-      uploadStatus.textContent = "Uploading...";
+      if (!selectedFiles.length) return;
+      uploadStatus.textContent = `Uploading ${selectedFiles.length} file(s)...`;
       const fd = new FormData();
-      fd.append("file", file);
+      selectedFiles.forEach(item => fd.append("files", item.file));
       const res = await fetch("/api/upload", { method: "POST", body: fd });
       const data = await res.json();
-      uploadStatus.textContent = res.ok
-        ? `Uploaded: ${data.saved_to} (queued: ${data.queued ? "yes" : "already seen"}) ${data.job_id ? "| job: " + data.job_id : ""}`
-        : `Upload failed: ${data.detail || "unknown error"}`;
-      document.getElementById("file").value = "";
+      if (res.ok) {
+        const accepted = (data.results || []).filter(r => r.status === "accepted");
+        const rejected = (data.results || []).filter(r => r.status !== "accepted");
+        uploadStatus.textContent = `Uploaded ${accepted.length} file(s)` +
+          (rejected.length ? `, ${rejected.length} rejected` : "") + ".";
+        const byName = new Map((data.results || []).map(r => [basename(r.filename), r.status]));
+        selectedFiles = selectedFiles.map(item => {
+          const nextStatus = byName.get(basename(item.file.name));
+          if (nextStatus === "accepted") return { ...item, status: "uploaded" };
+          if (nextStatus === "rejected") return { ...item, status: "rejected" };
+          return item;
+        });
+      } else {
+        uploadStatus.textContent = `Upload failed: ${data.detail || "unknown error"}`;
+      }
+      syncInputFiles();
+      renderUploads();
       await refresh();
+    });
+
+    filesInput.addEventListener("change", (e) => {
+      const incoming = Array.from(e.target.files || []);
+      const existing = new Set(selectedFiles.map(item => `${item.file.name}_${item.file.size}_${item.file.lastModified}`));
+      incoming.forEach(f => {
+        const key = `${f.name}_${f.size}_${f.lastModified}`;
+        if (!existing.has(key)) {
+          selectedFiles.push({ file: f, status: "ready" });
+          existing.add(key);
+        }
+      });
+      syncInputFiles();
+      renderUploads();
+    });
+
+    ["dragenter", "dragover"].forEach(evt => {
+      dropzone.addEventListener(evt, (e) => {
+        e.preventDefault();
+        dropzone.classList.add("dragover");
+      });
+    });
+    ["dragleave", "drop"].forEach(evt => {
+      dropzone.addEventListener(evt, (e) => {
+        e.preventDefault();
+        dropzone.classList.remove("dragover");
+        if (evt === "drop") {
+          const incoming = Array.from(e.dataTransfer.files || []);
+          const existing = new Set(selectedFiles.map(item => `${item.file.name}_${item.file.size}_${item.file.lastModified}`));
+          incoming.forEach(f => {
+            const key = `${f.name}_${f.size}_${f.lastModified}`;
+            if (!existing.has(key)) {
+              selectedFiles.push({ file: f, status: "ready" });
+              existing.add(key);
+            }
+          });
+          syncInputFiles();
+          renderUploads();
+        }
+      });
+    });
+
+    removeSelectedBtn.addEventListener("click", () => {
+      const checked = Array.from(document.querySelectorAll(".upload-select:checked"))
+        .map(el => Number.parseInt(el.dataset.index || "", 10))
+        .filter(n => Number.isInteger(n))
+        .sort((a, b) => b - a);
+      checked.forEach(idx => selectedFiles.splice(idx, 1));
+      currentPage = Math.min(currentPage, totalPages());
+      syncInputFiles();
+      renderUploads();
+    });
+
+    maxRowsInput.addEventListener("change", () => {
+      if (!maxRowsInput.value || Number.parseInt(maxRowsInput.value, 10) < 1) {
+        maxRowsInput.value = "5";
+      }
+      currentPage = 1;
+      renderUploads();
+    });
+
+    prevPageBtn.addEventListener("click", () => {
+      currentPage = Math.max(1, currentPage - 1);
+      renderUploads();
+    });
+
+    nextPageBtn.addEventListener("click", () => {
+      currentPage = Math.min(totalPages(), currentPage + 1);
+      renderUploads();
     });
 
     document.getElementById("reset-btn").addEventListener("click", async () => {
@@ -538,6 +913,19 @@
         compareModal.setAttribute("aria-hidden", "true");
       }
     });
+    document.getElementById("close-quality-modal").addEventListener("click", () => {
+      qualityModal.classList.remove("open");
+      qualityModal.setAttribute("aria-hidden", "true");
+    });
+    qualityModal.addEventListener("click", (e) => {
+      if (e.target === qualityModal) {
+        qualityModal.classList.remove("open");
+        qualityModal.setAttribute("aria-hidden", "true");
+      }
+    });
+    qualityOnlyAnomalies?.addEventListener("change", () => {
+      refreshQualityTables();
+    });
     document.getElementById("close-entity-modal").addEventListener("click", () => {
       entityModal.classList.remove("open");
       entityModal.setAttribute("aria-hidden", "true");
@@ -549,11 +937,13 @@
       }
     });
     window.openCompare = openCompare;
+    window.openQuality = openQuality;
     window.openEntity = openEntity;
     window.rerunJob = rerunJob;
     window.downloadBulkSql = downloadBulkSql;
     window.loadToSqlite = loadToSqlite;
 
+    renderUploads();
     refresh();
     setInterval(refresh, 1200);
   </script>

@@ -29,6 +29,7 @@ if str(PIPELINE_DIR) not in sys.path:
     sys.path.insert(0, str(PIPELINE_DIR))
 
 import standardize as std  # type: ignore  # noqa: E402
+from schema_report import parse_schema as parse_schema_detailed  # type: ignore  # noqa: E402
 from .db_sqlite import DB_PATH, load_standardized_csv_into_sqlite  # type: ignore  # noqa: E402
 
 
@@ -76,6 +77,23 @@ AI_LINK_CANDIDATES = max(3, int(os.getenv("PIPELINE_AI_LINK_CANDIDATES", "8")))
 AI_LINK_MAX_CALLS_PER_JOB = max(0, int(os.getenv("PIPELINE_AI_LINK_MAX_CALLS_PER_JOB", "40")))
 TOKEN_RE = re.compile(r"[a-z0-9]{3,}")
 JSON_BLOCK_RE = re.compile(r"\{.*\}", re.DOTALL)
+INT_RE = re.compile(r"^[+-]?\d+$")
+NUMERIC_RE = re.compile(r"^[+-]?(\d+(\.\d+)?|\.\d+)$")
+ZERO_DATE_RE = re.compile(r"^0{4}-0{2}-0{2}(?:[ T]0{2}:0{2}(?::0{2})?)?$")
+ZERO_DATE_DOT_RE = re.compile(r"^0{2}[./]0{2}[./]0{4}(?:[ T]0{2}:0{2}(?::0{2})?)?$")
+ZERO_DATE_COMPACT_RE = re.compile(r"^0{8}$")
+DT_FORMATS = [
+    "%Y-%m-%d",
+    "%Y-%m-%d %H:%M",
+    "%Y-%m-%d %H:%M:%S",
+    "%d.%m.%Y",
+    "%d.%m.%Y %H:%M",
+    "%d.%m.%Y %H:%M:%S",
+    "%d-%b-%Y",
+    "%d-%b-%Y %H:%M:%S",
+    "%Y%m%d",
+    "%H:%M:%S",
+]
 
 
 def parse_bool_env(name: str, default: bool = False) -> bool:
@@ -104,6 +122,146 @@ def normalize_entity_value(value: Any) -> str:
     if text.lower() in {"na", "n/a", "nan", "none", "null", "unknown", "-"}:
         return ""
     return text
+
+
+def normalize_text(value: Any) -> str:
+    if value is None:
+        return ""
+    return str(value).strip()
+
+
+def is_missing_value(value: Any) -> bool:
+    text = "" if value is None else str(value).strip().lower()
+    return text in {"", "na", "n/a", "nan", "none", "null", "unknown", "-"}
+
+
+def is_zero_date_placeholder(value: Any) -> bool:
+    text = "" if value is None else str(value).strip()
+    if not text:
+        return False
+    return bool(
+        ZERO_DATE_RE.match(text)
+        or ZERO_DATE_DOT_RE.match(text)
+        or ZERO_DATE_COMPACT_RE.match(text)
+    )
+
+
+def parse_datetime_like(value: str) -> bool:
+    text = value.strip()
+    if not text:
+        return True
+    try:
+        datetime.fromisoformat(text.replace("T", " "))
+        return True
+    except ValueError:
+        pass
+    for fmt in DT_FORMATS:
+        try:
+            datetime.strptime(text, fmt)
+            return True
+        except ValueError:
+            continue
+    return False
+
+
+def value_matches_type(sql_type: str, value: str) -> bool:
+    t = sql_type.lower()
+    if value == "":
+        return True
+    if t.startswith("smallint") or t.startswith("int") or t.startswith("bigint"):
+        return INT_RE.match(value) is not None
+    if t.startswith("numeric") or t.startswith("decimal") or t.startswith("float"):
+        return NUMERIC_RE.match(value.replace(",", ".")) is not None
+    if t.startswith("datetime") or t.startswith("date") or t.startswith("time"):
+        return parse_datetime_like(value)
+    return True
+
+
+def eval_schema_quality(
+    rows: list[dict[str, Any]], table_schema: list[dict[str, Any]]
+) -> dict[str, Any]:
+    cols = [c for c in table_schema if c["name"] != "coId"]
+    col_types = {c["name"]: str(c.get("type", "")) for c in cols}
+    required = [c["name"] for c in cols if not c["nullable"]]
+    type_checked = 0
+    type_valid = 0
+    nan_values = 0
+    type_invalid_examples: list[dict[str, Any]] = []
+    max_invalid_examples = 20
+    req_total = len(rows) * len(required)
+    req_present = 0
+    required_missing_by_column: dict[str, dict[str, int]] = {
+        c: {"present": 0, "missing": 0, "total": len(rows)} for c in required
+    }
+    missing_by_column: dict[str, dict[str, int]] = {
+        c["name"]: {"present": 0, "missing": 0, "total": len(rows)} for c in cols
+    }
+    nan_samples: list[dict[str, Any]] = []
+
+    for row_idx, row in enumerate(rows):
+        for col in cols:
+            name = col["name"]
+            raw_value = row.get(name, "")
+            value = "" if raw_value is None else str(raw_value).strip()
+            if value.lower() == "nan":
+                nan_values += 1
+                if len(nan_samples) < 20:
+                    nan_samples.append(
+                        {
+                            "row_index": row_idx,
+                            "column": name,
+                            "value": value,
+                        }
+                    )
+            sql_type = str(col["type"])
+            is_datetime = sql_type.lower().startswith(("datetime", "date", "time"))
+            is_missing = value == "" or is_missing_value(value) or (is_datetime and is_zero_date_placeholder(value))
+            if is_missing:
+                missing_by_column[name]["missing"] += 1
+                continue
+            missing_by_column[name]["present"] += 1
+            type_checked += 1
+            if value_matches_type(sql_type, value):
+                type_valid += 1
+            elif len(type_invalid_examples) < max_invalid_examples:
+                type_invalid_examples.append(
+                    {
+                        "row_index": row_idx,
+                        "column": name,
+                        "sql_type": sql_type,
+                        "value": value,
+                    }
+                )
+        for req_col in required:
+            req_value = row.get(req_col, "")
+            req_type = col_types.get(req_col, "")
+            req_is_datetime = req_type.lower().startswith(("datetime", "date", "time"))
+            if not (
+                is_missing_value(req_value)
+                or (req_is_datetime and is_zero_date_placeholder(req_value))
+            ):
+                req_present += 1
+                required_missing_by_column[req_col]["present"] += 1
+            else:
+                required_missing_by_column[req_col]["missing"] += 1
+
+    type_valid_rate = None if type_checked == 0 else type_valid / type_checked
+    required_fill_rate = None if req_total == 0 else req_present / req_total
+    missing_values_total = sum(stats["missing"] for stats in missing_by_column.values())
+    return {
+        "type_checked_values": type_checked,
+        "type_valid_values": type_valid,
+        "type_valid_rate": type_valid_rate,
+        "type_invalid_examples": type_invalid_examples,
+        "required_columns": required,
+        "required_fill_rate": required_fill_rate,
+        "required_missing_values": req_total - req_present,
+        "required_missing_by_column": required_missing_by_column,
+        "missing_values_total": missing_values_total,
+        "missing_by_column": missing_by_column,
+        "nan_values": nan_values,
+        "nan_samples": nan_samples,
+    }
 
 
 def quote_sqlite_ident(name: str) -> str:
@@ -323,6 +481,7 @@ class QueueItem:
 class State:
     def __init__(self) -> None:
         self.schema = std.parse_schema(SCHEMA_SQL)
+        self.schema_detailed = parse_schema_detailed(SCHEMA_SQL)
         self.jobs: list[Job] = []
         self.jobs_by_id: dict[str, Job] = {}
         self.seen_signatures: set[str] = set()
@@ -967,6 +1126,25 @@ def truncate_cell(value: Any, max_len: int = 220) -> str:
     return text[: max_len - 1] + "…"
 
 
+def highlight_nan_preview(preview: dict[str, Any]) -> dict[str, Any]:
+    if not preview:
+        return preview
+    rows = preview.get("rows") or []
+    out_rows: list[list[str]] = []
+    for row in rows:
+        out_row: list[str] = []
+        for cell in row:
+            text = normalize_text(cell)
+            if text.lower() == "nan":
+                out_row.append("⚠ NaN")
+            else:
+                out_row.append(text)
+        out_rows.append(out_row)
+    preview["rows"] = out_rows
+    preview["headers"] = [normalize_text(h) for h in (preview.get("headers") or [])]
+    return preview
+
+
 def count_nonempty_output_columns(
     rows: list[dict[str, Any]], target_cols: list[str]
 ) -> int:
@@ -1138,6 +1316,8 @@ async def process_file(path: Path, source: str, job: Job) -> None:
             headers=headers,
         )
 
+        quality = eval_schema_quality(rows, state.schema_detailed[table])
+
         semantic_rows_enriched = 0
         semantic_extraction_used = False
         if (
@@ -1200,6 +1380,7 @@ async def process_file(path: Path, source: str, job: Job) -> None:
         job.linked_rows = linked_rows
         job.linked_entities_touched = linked_entities_touched
         profile["active_output_columns"] = active_output_columns
+        profile["quality"] = quality
         if sqlite_rows_inserted is not None:
             profile["sqlite_rows_inserted"] = sqlite_rows_inserted
         if sqlite_load_error:
@@ -1473,21 +1654,36 @@ async def api_download_linked(table: str) -> FileResponse:
 
 
 @app.post("/api/upload")
-async def api_upload(file: UploadFile = File(...)) -> dict[str, Any]:
-    ext = Path(file.filename or "").suffix.lower()
-    if ext not in SUPPORTED_EXT:
-        raise HTTPException(status_code=400, detail=f"unsupported extension: {ext}")
+async def api_upload(files: list[UploadFile] = File(...)) -> dict[str, Any]:
+    if not files:
+        raise HTTPException(status_code=400, detail="no files uploaded")
     ensure_dirs()
-    dst = INPUT_DIR / f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{safe_name(file.filename or 'upload')}"
-    with dst.open("wb") as f:
-        shutil.copyfileobj(file.file, f)
-    scheduled, job_id = await enqueue_processing(dst, "upload")
-    return {
-        "status": "accepted",
-        "saved_to": str(dst),
-        "queued": scheduled,
-        "job_id": job_id,
-    }
+    results: list[dict[str, Any]] = []
+    for file in files:
+        ext = Path(file.filename or "").suffix.lower()
+        if ext not in SUPPORTED_EXT:
+            results.append(
+                {
+                    "status": "rejected",
+                    "filename": file.filename or "",
+                    "detail": f"unsupported extension: {ext}",
+                }
+            )
+            continue
+        dst = INPUT_DIR / f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{safe_name(file.filename or 'upload')}"
+        with dst.open("wb") as f:
+            shutil.copyfileobj(file.file, f)
+        scheduled, job_id = await enqueue_processing(dst, "upload")
+        results.append(
+            {
+                "status": "accepted",
+                "filename": file.filename or "",
+                "saved_to": str(dst),
+                "queued": scheduled,
+                "job_id": job_id,
+            }
+        )
+    return {"status": "processed", "results": results}
 
 
 @app.post("/api/rerun/{job_id}")
@@ -1642,7 +1838,7 @@ async def api_compare(job_id: str, rows: int = 12, cols: int = 12) -> dict[str, 
         try:
             table = job.table or "tbImportAcData"
             h, recs, profile = std.load_records(input_path, table)
-            before = preview_from_records(h, recs, rows, cols)
+            before = highlight_nan_preview(preview_from_records(h, recs, rows, cols))
             before["profile"] = profile
             before["path"] = str(input_path)
         except Exception as exc:
@@ -1651,7 +1847,7 @@ async def api_compare(job_id: str, rows: int = 12, cols: int = 12) -> dict[str, 
     if job.output_file:
         try:
             out_path = Path(job.output_file)
-            after = load_output_csv_preview(out_path, rows, cols)
+            after = highlight_nan_preview(load_output_csv_preview(out_path, rows, cols))
             after["path"] = str(out_path)
         except Exception as exc:
             after_error = str(exc)
@@ -1663,6 +1859,7 @@ async def api_compare(job_id: str, rows: int = 12, cols: int = 12) -> dict[str, 
         "status": job.status,
         "table": job.table,
         "source": job.source,
+        "quality": job.profile.get("quality") if isinstance(job.profile, dict) else None,
         "before": before,
         "after": after,
         "before_error": before_error,
