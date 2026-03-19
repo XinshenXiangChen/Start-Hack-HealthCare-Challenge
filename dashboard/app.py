@@ -1178,8 +1178,14 @@ async def api_jobs(limit: int = 200) -> dict[str, Any]:
 
 @app.get("/api/entities")
 async def api_entities(limit: int = 200, q: str = "") -> dict[str, Any]:
-    entities = await state.list_entities(limit=limit, query=q)
-    return {"entities": entities}
+    q_txt = (q or "").strip()
+    entities = await state.list_entities(limit=limit, query=q_txt)
+    if not entities and not q_txt and LINK_STATE_PATH.exists():
+        await state.load_link_state()
+        entities = await state.list_entities(limit=limit, query=q_txt)
+    async with state.link_lock:
+        total_entities = len(state.entity_index)
+    return {"entities": entities, "total_entities": total_entities}
 
 
 @app.get("/api/entity/{entity_id}")

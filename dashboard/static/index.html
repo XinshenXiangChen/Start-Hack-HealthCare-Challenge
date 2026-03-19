@@ -350,7 +350,11 @@
       }
       const entities = data.entities || [];
       if (!entities.length) {
-        entitiesEl.innerHTML = `<tr><td colspan="6" class="small">No linked entities yet.</td></tr>`;
+        const total = Number(data.total_entities || 0);
+        const msg = q
+          ? `No linked entities found for filter "${q}".`
+          : (total > 0 ? `No entities in current view. Total linked entities: ${total}.` : "No linked entities yet.");
+        entitiesEl.innerHTML = `<tr><td colspan="6" class="small">${esc(msg)}</td></tr>`;
         return;
       }
       entitiesEl.innerHTML = entities.map(ent => {
