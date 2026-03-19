@@ -83,6 +83,8 @@ Dashboard behavior:
 - Queues each file and processes it with worker(s) (FIFO queue).
 - Standardizes each file to `runtime/standardized`.
 - Moves processed inputs to `runtime/processed`.
+- Builds a cross-file entity index (patient/case/encounter linking) under `runtime/linked`.
+- Linked rows include provenance and continuity fields (`_eid`, `_source_file`, `_source_job_id`, `_source_table`, `_source_row_index`, `_match_method`).
 - Provides upload + status UI at `http://localhost:8000`.
 
 Queue controls (optional env vars):
@@ -90,3 +92,8 @@ Queue controls (optional env vars):
 - `PIPELINE_WORKER_CONCURRENCY` (default `1`): number of concurrent workers.
 - `PIPELINE_SCAN_SECONDS` (default `5`): watcher scan interval.
 - `PIPELINE_IID_DICTIONARY`: explicit path to `IID-SID-ITEM.csv` (dashboard/runtime).
+- `PIPELINE_LINKED_DIR` (default `runtime/linked`): output directory for cross-file linked artifacts.
+- `PIPELINE_ENTITY_SAMPLE_LIMIT` (default `40`): max sample rows stored per linked entity for UI/API previews.
+- `PIPELINE_AI_LINKING` (default `1`): enable LLM fallback to match disconnected rows when explicit IDs are missing.
+- `PIPELINE_AI_LINK_TIMEOUT` (default `15`): timeout (seconds) per AI entity-link call.
+- `PIPELINE_AI_LINK_MAX_CALLS_PER_JOB` (default `40`): cap AI linking calls per file/job.

@@ -46,12 +46,13 @@
     }
     .title { margin: 0; font-size: 30px; line-height: 1.1; letter-spacing: -0.02em; }
     .subtitle { margin: 8px 0 0; color: var(--ink-soft); font-size: 15px; }
-    .kpis { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-top: 14px; }
+    .kpis { display: grid; grid-template-columns: repeat(7, 1fr); gap: 10px; margin-top: 14px; }
     .kpi { background: #f9fbfd; border: 1px solid var(--line); border-radius: 12px; padding: 11px; }
     .kpi .v { font-size: 24px; font-weight: 700; margin: 0; }
     .kpi .l { font-size: 12px; color: var(--ink-soft); margin: 2px 0 0; text-transform: uppercase; letter-spacing: .04em; }
     form { display: grid; gap: 10px; }
     input[type="file"] { width: 100%; border: 1px dashed var(--line); border-radius: 10px; padding: 10px; background: #fafcfe; }
+    input[type="text"] { width: 100%; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; background: #fff; }
     button {
       border: 0;
       border-radius: 10px;
@@ -130,6 +131,8 @@
           <div class="kpi"><p class="v" id="k-running">0</p><p class="l">Running</p></div>
           <div class="kpi"><p class="v" id="k-ok">0</p><p class="l">Succeeded</p></div>
           <div class="kpi"><p class="v" id="k-err">0</p><p class="l">Failed</p></div>
+          <div class="kpi"><p class="v" id="k-linked-entities">0</p><p class="l">Linked Entities</p></div>
+          <div class="kpi"><p class="v" id="k-linked-rows">0</p><p class="l">Linked Rows</p></div>
         </div>
       </section>
       <section class="panel">
@@ -159,12 +162,35 @@
             <th>Rows</th>
             <th>Mapped</th>
             <th>Semantic</th>
+            <th>Linked</th>
             <th>View</th>
             <th>Output</th>
             <th>Error</th>
           </tr>
         </thead>
         <tbody id="jobs"></tbody>
+      </table>
+    </section>
+    <section class="panel" style="margin-top:14px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+        <strong>Cross-file Entity Links</strong>
+        <div style="display:flex;gap:8px;align-items:center;min-width:min(600px,100%);">
+          <input id="entity-query" type="text" placeholder="Search entity id, case id, patient id..." />
+          <button id="entity-search" type="button" class="mini">Search</button>
+        </div>
+      </div>
+      <table style="margin-top:10px;">
+        <thead>
+          <tr>
+            <th>Entity</th>
+            <th>Keys</th>
+            <th>Tables</th>
+            <th>Rows</th>
+            <th>Samples</th>
+            <th>View</th>
+          </tr>
+        </thead>
+        <tbody id="entities"></tbody>
       </table>
     </section>
   </div>
@@ -193,6 +219,32 @@
     </div>
   </div>
 
+  <div id="entity-modal" class="modal" aria-hidden="true">
+    <div class="modal-card">
+      <div class="modal-head">
+        <div>
+          <strong>Cross-file Entity Detail</strong>
+          <div id="entity-meta" class="muted"></div>
+        </div>
+        <button id="close-entity-modal" type="button" class="reset">Close</button>
+      </div>
+      <div class="grid2" style="margin-top:10px;">
+        <section class="subpanel">
+          <h3>Entity Keys</h3>
+          <div id="entity-keys"></div>
+        </section>
+        <section class="subpanel">
+          <h3>Table Distribution</h3>
+          <div id="entity-tables"></div>
+        </section>
+      </div>
+      <section class="subpanel" style="margin-top:10px;">
+        <h3>Linked Samples</h3>
+        <div id="entity-samples"></div>
+      </section>
+    </div>
+  </div>
+
   <script>
     const jobsEl = document.getElementById("jobs");
     const cfgEl = document.getElementById("cfg");
@@ -203,12 +255,21 @@
     const kRun = document.getElementById("k-running");
     const kOk = document.getElementById("k-ok");
     const kErr = document.getElementById("k-err");
+    const kLinkedEntities = document.getElementById("k-linked-entities");
+    const kLinkedRows = document.getElementById("k-linked-rows");
+    const entitiesEl = document.getElementById("entities");
+    const entityQuery = document.getElementById("entity-query");
     const compareModal = document.getElementById("compare-modal");
     const cmpMeta = document.getElementById("cmp-meta");
     const cmpBefore = document.getElementById("cmp-before");
     const cmpAfter = document.getElementById("cmp-after");
     const cmpBeforeMeta = document.getElementById("cmp-before-meta");
     const cmpAfterMeta = document.getElementById("cmp-after-meta");
+    const entityModal = document.getElementById("entity-modal");
+    const entityMeta = document.getElementById("entity-meta");
+    const entityKeysEl = document.getElementById("entity-keys");
+    const entityTablesEl = document.getElementById("entity-tables");
+    const entitySamplesEl = document.getElementById("entity-samples");
 
     function esc(s) {
       return String(s ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
@@ -224,6 +285,86 @@
       const head = (pre.headers || []).map(h => `<th>${esc(h)}</th>`).join("");
       const rows = (pre.rows || []).map(r => `<tr>${r.map(v => `<td>${esc(v)}</td>`).join("")}</tr>`).join("");
       return `<table class="subtable"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table>`;
+    }
+
+    function renderKeyMap(keysObj) {
+      const keys = Object.keys(keysObj || {});
+      if (!keys.length) return "<div class='muted'>No entity keys found.</div>";
+      const rows = keys.map(k => `<tr><td>${esc(k)}</td><td>${esc((keysObj[k] || []).join(", "))}</td></tr>`).join("");
+      return `<table class="subtable"><thead><tr><th>Key</th><th>Values</th></tr></thead><tbody>${rows}</tbody></table>`;
+    }
+
+    function renderTableCounts(tableCounts) {
+      const keys = Object.keys(tableCounts || {});
+      if (!keys.length) return "<div class='muted'>No table links yet.</div>";
+      const rows = keys
+        .sort((a, b) => Number(tableCounts[b] || 0) - Number(tableCounts[a] || 0))
+        .map(t => `<tr><td>${esc(t)}</td><td>${esc(tableCounts[t])}</td><td><a class="dl" href="/api/download-linked/${encodeURIComponent(t)}">linked csv</a></td></tr>`)
+        .join("");
+      return `<table class="subtable"><thead><tr><th>Table</th><th>Rows</th><th>Download</th></tr></thead><tbody>${rows}</tbody></table>`;
+    }
+
+    function renderEntitySamples(samples) {
+      if (!samples || !samples.length) return "<div class='muted'>No samples captured yet.</div>";
+      const rows = samples.map(s => {
+        const preview = Object.entries(s.preview || {}).map(([k, v]) => `${k}: ${v}`).join(" | ");
+        return `<tr>
+          <td>${esc(s.table || "-")}</td>
+          <td>${esc(s.row_index || "-")}</td>
+          <td>${esc(s.job_id || "-")}</td>
+          <td class="small">${esc(s.input_file || "-")}</td>
+          <td>${esc(s.match_method || "-")}</td>
+          <td>${esc(preview)}</td>
+        </tr>`;
+      }).join("");
+      return `<table class="subtable"><thead><tr><th>Table</th><th>Row</th><th>Job</th><th>Source</th><th>Match</th><th>Preview</th></tr></thead><tbody>${rows}</tbody></table>`;
+    }
+
+    async function openEntity(entityId) {
+      entityMeta.textContent = "Loading...";
+      entityKeysEl.innerHTML = "";
+      entityTablesEl.innerHTML = "";
+      entitySamplesEl.innerHTML = "";
+      entityModal.classList.add("open");
+      entityModal.setAttribute("aria-hidden", "false");
+      const res = await fetch(`/api/entity/${encodeURIComponent(entityId)}`);
+      const data = await res.json();
+      if (!res.ok) {
+        entityMeta.textContent = `Failed: ${data.detail || "unknown error"}`;
+        return;
+      }
+      entityMeta.textContent =
+        `entity ${data.entity_id} | rows ${data.row_count || 0} | jobs ${(data.jobs || []).length} | last seen ${data.last_seen || "-"}`;
+      entityKeysEl.innerHTML = renderKeyMap(data.keys);
+      entityTablesEl.innerHTML = renderTableCounts(data.table_counts || {});
+      entitySamplesEl.innerHTML = renderEntitySamples(data.samples || []);
+    }
+
+    async function refreshEntities() {
+      const q = (entityQuery.value || "").trim();
+      const res = await fetch(`/api/entities?limit=30&q=${encodeURIComponent(q)}`);
+      const data = await res.json();
+      if (!res.ok) {
+        entitiesEl.innerHTML = `<tr><td colspan="6" class="small">Failed to load entities: ${esc(data.detail || "unknown error")}</td></tr>`;
+        return;
+      }
+      const entities = data.entities || [];
+      if (!entities.length) {
+        entitiesEl.innerHTML = `<tr><td colspan="6" class="small">No linked entities yet.</td></tr>`;
+        return;
+      }
+      entitiesEl.innerHTML = entities.map(ent => {
+        const keySummary = Object.entries(ent.keys || {}).slice(0, 2).map(([k, v]) => `${k}: ${(v || []).slice(0, 2).join(", ")}`).join(" | ");
+        const tableSummary = Object.entries(ent.table_counts || {}).map(([t, c]) => `${t} (${c})`).join(", ");
+        return `<tr>
+          <td>${esc(ent.entity_id)}</td>
+          <td class="small">${esc(keySummary || "-")}</td>
+          <td class="small">${esc(tableSummary || "-")}</td>
+          <td>${esc(ent.row_count || 0)}</td>
+          <td>${esc(ent.sample_count || 0)}</td>
+          <td><button class="mini" type="button" onclick="openEntity('${ent.entity_id}')">inspect</button></td>
+        </tr>`;
+      }).join("");
     }
 
     async function openCompare(jobId) {
@@ -269,15 +410,19 @@
       kRun.textContent = summary.running_jobs;
       kOk.textContent = summary.ok_jobs;
       kErr.textContent = summary.error_jobs;
+      kLinkedEntities.textContent = summary.linked_entities ?? 0;
+      kLinkedRows.textContent = summary.linked_rows ?? 0;
       cfgEl.innerHTML =
         `Input: <b>${esc(summary.input_dir)}</b><br>` +
         `Output: <b>${esc(summary.output_dir)}</b><br>` +
         `Model: <b>${esc(summary.model)}</b> | LLM: <b>${summary.llm_enabled ? "on" : "off"}</b> | Workers: <b>${summary.worker_concurrency}</b> | Queue depth: <b>${summary.queue_size}</b> | Scan every <b>${summary.scan_seconds}s</b><br>` +
-        `IID dictionary: <b>${esc(summary.iid_dictionary || "not loaded")}</b>`;
+        `IID dictionary: <b>${esc(summary.iid_dictionary || "not loaded")}</b> | Linked dir: <b>${esc(summary.linked_dir || "-")}</b><br>` +
+        `AI linking: <b>${summary.ai_linking_enabled ? "on" : "off"}</b> | AI attempts: <b>${esc(summary.ai_link_attempts ?? 0)}</b> | AI matches: <b>${esc(summary.ai_link_matches ?? 0)}</b>`;
 
       jobsEl.innerHTML = (data.jobs || []).map(j => {
         const rows = (j.rows_in ?? "-") + "/" + (j.rows_out ?? "-");
         const sem = j.semantic_extraction_used ? `yes (${j.semantic_rows_enriched})` : "no";
+        const linked = `${j.linked_rows || 0} (${j.linked_entities_touched || 0} ent)`;
         const view = `<button class="mini" type="button" onclick="openCompare('${j.id}')">visualize</button>`;
         const out = j.output_file ? `<a class="dl" href="/api/download/${j.id}">download</a>` : "-";
         return `<tr>
@@ -287,11 +432,13 @@
           <td>${esc(rows)}</td>
           <td>${esc(j.mapped_columns ?? "-")}</td>
           <td>${esc(sem)}</td>
+          <td>${esc(linked)}</td>
           <td>${view}</td>
           <td>${out}</td>
           <td class="small">${esc(j.error || "")}</td>
         </tr>`;
       }).join("");
+      await refreshEntities();
     }
 
     document.getElementById("upload-form").addEventListener("submit", async (e) => {
@@ -322,6 +469,15 @@
         : `Reset failed: ${res.status === 404 ? "endpoint not found (restart backend on latest code)" : (data.detail || "unknown error")}`;
       await refresh();
     });
+    document.getElementById("entity-search").addEventListener("click", async () => {
+      await refreshEntities();
+    });
+    entityQuery.addEventListener("keydown", async (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        await refreshEntities();
+      }
+    });
 
     document.getElementById("close-modal").addEventListener("click", () => {
       compareModal.classList.remove("open");
@@ -333,7 +489,18 @@
         compareModal.setAttribute("aria-hidden", "true");
       }
     });
+    document.getElementById("close-entity-modal").addEventListener("click", () => {
+      entityModal.classList.remove("open");
+      entityModal.setAttribute("aria-hidden", "true");
+    });
+    entityModal.addEventListener("click", (e) => {
+      if (e.target === entityModal) {
+        entityModal.classList.remove("open");
+        entityModal.setAttribute("aria-hidden", "true");
+      }
+    });
     window.openCompare = openCompare;
+    window.openEntity = openEntity;
 
     refresh();
     setInterval(refresh, 1200);

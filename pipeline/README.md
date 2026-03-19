@@ -8,6 +8,18 @@ Live dashboard app is under `dashboard/` at repo root and can be launched with:
 python pipeline.py dashboard
 ```
 
+Cross-file linking in dashboard mode:
+
+- During ingestion, standardized rows are linked across files by shared entity IDs (`coPatient_id`, `coCaseId`, `coCaseIdAlpha`, `coEncounter_id`).
+- When explicit IDs are missing, optional LLM fallback can match rows to existing entities to reduce data isolation.
+- Linked index/state is persisted at `runtime/linked/entity_index.json`.
+- Per-table linked exports are written to `runtime/linked/<table>__linked.csv`.
+- Linked CSV rows include continuity/provenance columns like `_eid`, `_source_file`, `_source_job_id`, `_source_table`, `_source_row_index`, `_match_method`.
+- API endpoints:
+  - `GET /api/entities`
+  - `GET /api/entity/{entity_id}`
+  - `GET /api/download-linked/{table}`
+
 ## Components
 
 - `standardize.py`: normalize mixed CSV/XLSX/PDF/SQL data into SQL target-table CSVs
