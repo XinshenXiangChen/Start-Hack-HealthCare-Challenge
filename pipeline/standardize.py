@@ -7,8 +7,10 @@ import argparse
 import csv
 import json
 import math
+import os
 import re
 import subprocess
+import unicodedata
 from datetime import date, datetime, time
 from pathlib import Path
 from typing import Any
@@ -31,6 +33,12 @@ SQL_INSERT_RE = re.compile(
     r"insert\s+into\s+([^\s(]+)\s*(?:\((.*?)\))?\s*values\s*(.*?);",
     re.IGNORECASE | re.DOTALL,
 )
+SID_CODE_RE = re.compile(r"\b\d{2}(?:[_-]\d{2})+\b")
+IID_DICT_FILENAMES = ("IID-SID-ITEM.csv", "iid-sid-item.csv", "IID_SID_ITEM.csv")
+
+_IID_LOOKUP: dict[str, str] = {}
+_IID_DICTIONARY_SOURCE: str | None = None
+_IID_LOOKUP_INITIALIZED = False
 
 
 TABLE_HINTS = {
@@ -286,7 +294,170 @@ ALIASES = {
 
 
 def normalize(name: str) -> str:
-    return re.sub(r"[^a-z0-9_]", "", name.strip().lower())
+    text = unicodedata.normalize("NFKD", name or "")
+    text = text.encode("ascii", "ignore").decode("ascii")
+    return re.sub(r"[^a-z0-9_]", "", text.strip().lower())
+
+
+def to_target_col_from_iid(iid: str) -> str:
+    cleaned = iid.replace("-", "_").upper().strip()
+    m = re.match(r"^(E\d+)_I_(\d+)$", cleaned)
+    if m:
+        left = m.group(1).replace("_", "")
+        num = str(int(m.group(2)))
+        if len(num) < 3:
+            num = num.zfill(3)
+        return f"co{left}I{num}"
+    return "co" + cleaned.replace("_", "")
+
+
+def build_iid_lookup_keys(text: str) -> list[str]:
+    raw = (text or "").strip()
+    if not raw:
+        return []
+    out: list[str] = []
+    for cand in {
+        raw,
+        raw.lower(),
+        raw.replace("-", "_"),
+        raw.lower().replace("-", "_"),
+        raw.replace("_", ""),
+        raw.lower().replace("_", ""),
+        raw.replace("-", ""),
+        raw.lower().replace("-", ""),
+        normalize(raw),
+    }:
+        c = cand.strip()
+        if c:
+            out.append(c)
+    return out
+
+
+def parse_iid_sid_item_dictionary(path: Path) -> dict[str, str]:
+    enc, delim = sniff_text_file(path)
+    with path.open(encoding=enc, newline="") as f:
+        reader = csv.DictReader(f, delimiter=delim)
+        if not reader.fieldnames:
+            return {}
+        headers = {normalize(h): h for h in reader.fieldnames}
+
+        iid_col = headers.get("itmiid") or headers.get("iid")
+        sid_col = headers.get("itmsid") or headers.get("sid")
+        de_col = (
+            headers.get("itmname255_de")
+            or headers.get("itmname_de")
+            or headers.get("name_de")
+            or headers.get("itemname_de")
+        )
+        en_col = (
+            headers.get("itmname255_en")
+            or headers.get("itmname_en")
+            or headers.get("name_en")
+            or headers.get("itemname_en")
+        )
+
+        if not iid_col:
+            return {}
+
+        lookup: dict[str, str] = {}
+        for row in reader:
+            iid = str(row.get(iid_col, "") or "").strip()
+            if not iid:
+                continue
+            iid = iid.replace("-", "_").upper()
+            for key in build_iid_lookup_keys(iid):
+                lookup[key] = iid
+            if sid_col:
+                sid_val = str(row.get(sid_col, "") or "").strip()
+                for key in build_iid_lookup_keys(sid_val):
+                    lookup[key] = iid
+            if de_col:
+                de_val = str(row.get(de_col, "") or "").strip()
+                for key in build_iid_lookup_keys(de_val):
+                    lookup[key] = iid
+            if en_col:
+                en_val = str(row.get(en_col, "") or "").strip()
+                for key in build_iid_lookup_keys(en_val):
+                    lookup[key] = iid
+        return lookup
+
+
+def discover_iid_dictionary_path(
+    explicit_path: Path | None, search_roots: list[Path] | None = None
+) -> Path | None:
+    if explicit_path and explicit_path.exists():
+        return explicit_path
+
+    env_text = (os.getenv("PIPELINE_IID_DICTIONARY") or "").strip()
+    env_path = Path(env_text) if env_text else None
+    if env_path and env_path.exists():
+        return env_path
+
+    roots = search_roots[:] if search_roots else []
+    roots.extend([Path.cwd(), Path(__file__).resolve().parents[1]])
+    seen: set[str] = set()
+    for root in roots:
+        root_r = root.resolve()
+        root_s = str(root_r)
+        if root_s in seen:
+            continue
+        seen.add(root_s)
+        for name in IID_DICT_FILENAMES:
+            direct = root_r / name
+            if direct.exists():
+                return direct
+            for p in root_r.glob(f"*/{name}"):
+                if p.exists():
+                    return p
+            for p in root_r.glob(f"*/*/{name}"):
+                if p.exists():
+                    return p
+    return None
+
+
+def configure_iid_dictionary(
+    path: Path | None = None, search_roots: list[Path] | None = None
+) -> str | None:
+    global _IID_LOOKUP, _IID_DICTIONARY_SOURCE, _IID_LOOKUP_INITIALIZED
+    resolved = discover_iid_dictionary_path(path, search_roots)
+    _IID_LOOKUP_INITIALIZED = True
+    if not resolved:
+        _IID_LOOKUP = {}
+        _IID_DICTIONARY_SOURCE = None
+        return None
+    _IID_LOOKUP = parse_iid_sid_item_dictionary(resolved)
+    _IID_DICTIONARY_SOURCE = str(resolved)
+    return _IID_DICTIONARY_SOURCE
+
+
+def get_iid_dictionary_source() -> str | None:
+    return _IID_DICTIONARY_SOURCE
+
+
+def maybe_init_iid_dictionary() -> None:
+    global _IID_LOOKUP_INITIALIZED
+    if _IID_LOOKUP_INITIALIZED:
+        return
+    configure_iid_dictionary(None, None)
+
+
+def resolve_ac_header_with_iid_dictionary(source_col: str) -> str | None:
+    maybe_init_iid_dictionary()
+    if not _IID_LOOKUP:
+        return None
+
+    candidates: list[str] = []
+    candidates.extend(build_iid_lookup_keys(source_col))
+    for code in EPA_CODE_RE.findall(source_col):
+        candidates.extend(build_iid_lookup_keys(code))
+    for sid in SID_CODE_RE.findall(source_col):
+        candidates.extend(build_iid_lookup_keys(sid.replace("-", "_")))
+
+    for key in candidates:
+        iid = _IID_LOOKUP.get(key)
+        if iid:
+            return to_target_col_from_iid(iid)
+    return None
 
 
 def dedupe_headers(headers: list[str]) -> list[str]:
@@ -855,6 +1026,10 @@ def build_mapping(
                     break
             if source_col in mapping:
                 continue
+            dict_dest = resolve_ac_header_with_iid_dictionary(source_col)
+            if dict_dest and dict_dest in target_set:
+                mapping[source_col] = dict_dest
+                continue
         dest = target_normalized.get(src_norm)
         if dest:
             mapping[source_col] = dest
@@ -909,6 +1084,7 @@ def main() -> None:
     parser.add_argument("--model", default="llama3.2:latest")
     parser.add_argument("--llm-timeout", default=45, type=int)
     parser.add_argument("--prompt-template", type=Path)
+    parser.add_argument("--iid-dictionary", type=Path)
     parser.add_argument("--no-llm", action="store_true")
     args = parser.parse_args()
 
@@ -919,6 +1095,10 @@ def main() -> None:
     prompt_template = None
     if args.prompt_template:
         prompt_template = args.prompt_template.read_text(encoding="utf-8")
+    iid_source = configure_iid_dictionary(
+        path=args.iid_dictionary,
+        search_roots=[in_dir, in_dir.parent, Path.cwd(), Path(__file__).resolve().parents[1]],
+    )
 
     files = sorted(
         [
@@ -971,6 +1151,7 @@ def main() -> None:
                     "mapped_columns": len(mapping),
                     "unmapped_headers": [h for h in headers if h not in mapping],
                     "profile": profile,
+                    "iid_dictionary": iid_source,
                 }
             )
         except Exception as exc:

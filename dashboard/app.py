@@ -41,6 +41,8 @@ LLM_TIMEOUT = int(os.getenv("PIPELINE_LLM_TIMEOUT", "45"))
 NO_LLM = os.getenv("PIPELINE_NO_LLM", "0").strip().lower() in {"1", "true", "yes"}
 SCAN_SECONDS = int(os.getenv("PIPELINE_SCAN_SECONDS", "5"))
 WORKER_CONCURRENCY = int(os.getenv("PIPELINE_WORKER_CONCURRENCY", "1"))
+IID_DICTIONARY_ENV = (os.getenv("PIPELINE_IID_DICTIONARY") or "").strip()
+IID_SEARCH_ROOT = Path(os.getenv("PIPELINE_IID_SEARCH_ROOT", str(REPO_ROOT.parent)))
 
 
 def utc_now() -> str:
@@ -137,6 +139,9 @@ class State:
             "model": MODEL,
             "llm_enabled": not NO_LLM,
             "scan_seconds": SCAN_SECONDS,
+            "iid_dictionary": (
+                std.get_iid_dictionary_source() if hasattr(std, "get_iid_dictionary_source") else None
+            ),
         }
 
     async def reset_state(self) -> dict[str, int]:
@@ -395,6 +400,12 @@ app.mount("/static", StaticFiles(directory=str(REPO_ROOT / "dashboard" / "static
 @app.on_event("startup")
 async def on_startup() -> None:
     ensure_dirs()
+    if hasattr(std, "configure_iid_dictionary"):
+        iid_path = Path(IID_DICTIONARY_ENV) if IID_DICTIONARY_ENV else None
+        std.configure_iid_dictionary(
+            path=iid_path,
+            search_roots=[INPUT_DIR, INPUT_DIR.parent, REPO_ROOT, IID_SEARCH_ROOT],
+        )
     if state.scanner_task is None:
         state.scanner_task = asyncio.create_task(scanner_loop())
     if not state.worker_tasks:

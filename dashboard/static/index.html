@@ -237,7 +237,10 @@
       const res = await fetch(`/api/compare/${jobId}?rows=12&cols=12`);
       const data = await res.json();
       if (!res.ok) {
-        cmpMeta.textContent = `Failed: ${data.detail || "unknown error"}`;
+        const msg = res.status === 404
+          ? "Compare endpoint/job not found. Backend may be outdated; restart dashboard from latest branch."
+          : (data.detail || "unknown error");
+        cmpMeta.textContent = `Failed: ${msg}`;
         return;
       }
       cmpMeta.innerHTML =
@@ -269,7 +272,8 @@
       cfgEl.innerHTML =
         `Input: <b>${esc(summary.input_dir)}</b><br>` +
         `Output: <b>${esc(summary.output_dir)}</b><br>` +
-        `Model: <b>${esc(summary.model)}</b> | LLM: <b>${summary.llm_enabled ? "on" : "off"}</b> | Workers: <b>${summary.worker_concurrency}</b> | Queue depth: <b>${summary.queue_size}</b> | Scan every <b>${summary.scan_seconds}s</b>`;
+        `Model: <b>${esc(summary.model)}</b> | LLM: <b>${summary.llm_enabled ? "on" : "off"}</b> | Workers: <b>${summary.worker_concurrency}</b> | Queue depth: <b>${summary.queue_size}</b> | Scan every <b>${summary.scan_seconds}s</b><br>` +
+        `IID dictionary: <b>${esc(summary.iid_dictionary || "not loaded")}</b>`;
 
       jobsEl.innerHTML = (data.jobs || []).map(j => {
         const rows = (j.rows_in ?? "-") + "/" + (j.rows_out ?? "-");
@@ -315,7 +319,7 @@
       const data = await res.json();
       uploadStatus.textContent = res.ok
         ? `Reset done: jobs=${data.cleared_jobs}, queue=${data.cleared_queue_items}, deleted_files=${data.deleted_files}`
-        : `Reset failed: ${data.detail || "unknown error"}`;
+        : `Reset failed: ${res.status === 404 ? "endpoint not found (restart backend on latest code)" : (data.detail || "unknown error")}`;
       await refresh();
     });
 

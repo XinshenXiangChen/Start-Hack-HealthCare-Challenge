@@ -45,7 +45,8 @@ Run standardization:
 python pipeline.py standardize \
   --input-dir "data/input" \
   --output-dir "pipeline/out/run_001" \
-  --model llama3.2:latest
+  --model llama3.2:latest \
+  --iid-dictionary "/absolute/path/to/IID-SID-ITEM.csv"
 ```
 
 Supported input formats for `--input-dir`:
@@ -54,6 +55,11 @@ Supported input formats for `--input-dir`:
 - `.xlsx`
 - `.pdf`
 - `.sql` (SQL dump files with `INSERT INTO ... VALUES ...`)
+
+IID/SID dictionary support:
+
+- If you provide `IID-SID-ITEM.csv`, the pipeline can resolve `SID` or item-name headers to canonical `IID`.
+- For AC files, this enables `SID/ItemName -> IID -> co...` mapping even when source headers do not include direct `E*_I_*`.
 
 Run evaluation:
 
@@ -83,3 +89,4 @@ Queue controls (optional env vars):
 
 - `PIPELINE_WORKER_CONCURRENCY` (default `1`): number of concurrent workers.
 - `PIPELINE_SCAN_SECONDS` (default `5`): watcher scan interval.
+- `PIPELINE_IID_DICTIONARY`: explicit path to `IID-SID-ITEM.csv` (dashboard/runtime).

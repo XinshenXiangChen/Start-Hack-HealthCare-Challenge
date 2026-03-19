@@ -81,6 +81,7 @@ def main() -> None:
     standardize_cmd.add_argument("--output-dir", required=True)
     standardize_cmd.add_argument("--model", default="llama3.2:latest")
     standardize_cmd.add_argument("--llm-timeout", type=int, default=45)
+    standardize_cmd.add_argument("--iid-dictionary")
     standardize_cmd.add_argument(
         "--prompt-template",
         default="pipeline/prompts/column_mapper_prompt.txt",
@@ -136,6 +137,8 @@ def main() -> None:
         ]
         if args.prompt_template:
             cmd_args.extend(["--prompt-template", str(REPO_ROOT / args.prompt_template)])
+        if args.iid_dictionary:
+            cmd_args.extend(["--iid-dictionary", str(REPO_ROOT / args.iid_dictionary)])
         if args.no_llm:
             cmd_args.append("--no-llm")
         rc = run_python(PIPELINE_DIR / "standardize.py", cmd_args)
