@@ -920,8 +920,21 @@ def preview_from_records(
     records: list[dict[str, Any]],
     max_rows: int,
     max_cols: int,
+    prefer_nonempty_cols: bool = False,
 ) -> dict[str, Any]:
     shown_headers = headers[:max_cols]
+    if prefer_nonempty_cols and headers:
+        counts: list[tuple[int, int, str]] = []
+        for idx, col in enumerate(headers):
+            nonempty = 0
+            for rec in records:
+                if str(rec.get(col, "") or "").strip():
+                    nonempty += 1
+            counts.append((nonempty, idx, col))
+        counts.sort(key=lambda t: (-t[0], t[1]))
+        chosen = [col for nonempty, _idx, col in counts if nonempty > 0][:max_cols]
+        if chosen:
+            shown_headers = chosen
     out_rows: list[list[str]] = []
     for rec in records[:max_rows]:
         out_rows.append([truncate_cell(rec.get(col, "")) for col in shown_headers])
@@ -947,7 +960,13 @@ def load_output_csv_preview(path: Path, max_rows: int, max_cols: int) -> dict[st
         records: list[dict[str, Any]] = []
         for row in reader:
             records.append(row)
-    return preview_from_records(headers, records, max_rows, max_cols)
+    return preview_from_records(
+        headers=headers,
+        records=records,
+        max_rows=max_rows,
+        max_cols=max_cols,
+        prefer_nonempty_cols=True,
+    )
 
 
 def resolve_job_input_path(job: Job) -> Path | None:

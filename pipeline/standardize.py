@@ -21,6 +21,7 @@ import pdfplumber
 
 CREATE_RE = re.compile(r"^\s*create\s+table\s+([A-Za-z0-9_]+)\s*$", re.IGNORECASE)
 EPA_CODE_RE = re.compile(r"E\d+_I_\d+", re.IGNORECASE)
+AC_LEGACY_EPA_RE = re.compile(r"^EPA(\d{3,6})[A-Z0-9_]*$", re.IGNORECASE)
 JSON_BLOCK_RE = re.compile(r"\{.*\}", re.DOTALL)
 PDF_DATE_RE = re.compile(r"Date:\s*(.*?)\s+Shift:", re.IGNORECASE | re.DOTALL)
 PDF_SHIFT_RE = re.compile(
@@ -50,6 +51,10 @@ TABLE_HINTS = {
     "tbImportNursingDailyReportsData": ["nursing", "report"],
     "tbImportAcData": ["epaac", "epaac-data", "einsch"],
 }
+
+
+AC_LEGACY_CASE_KEYS = {"patfal", "fallid", "fall_id", "caseid", "case_id", "cas"}
+AC_LEGACY_CASE_ALPHA_KEYS = {"patfoe", "patdoe"}
 
 
 ALIASES = {
@@ -457,6 +462,53 @@ def resolve_ac_header_with_iid_dictionary(source_col: str) -> str | None:
         iid = _IID_LOOKUP.get(key)
         if iid:
             return to_target_col_from_iid(iid)
+    return None
+
+
+def resolve_ac_legacy_header(source_col: str, target_set: set[str]) -> str | None:
+    src_norm = normalize(source_col)
+    if src_norm in AC_LEGACY_CASE_KEYS and "coCaseId" in target_set:
+        return "coCaseId"
+    if src_norm in AC_LEGACY_CASE_ALPHA_KEYS and "coCaseIdAlpha" in target_set:
+        return "coCaseIdAlpha"
+
+    m = AC_LEGACY_EPA_RE.match((source_col or "").strip().upper())
+    if not m:
+        return None
+    num_raw = m.group(1)
+    candidates: list[str] = []
+
+    try:
+        n_int = int(num_raw)
+    except ValueError:
+        n_int = -1
+
+    if n_int >= 0:
+        candidates.append(f"coE0I{n_int:03d}")
+        candidates.append(f"coE0I{n_int}")
+
+    candidates.append(f"coE0I{num_raw}")
+    nz = num_raw.lstrip("0")
+    if nz:
+        candidates.append(f"coE0I{nz.zfill(3) if len(nz) < 3 else nz}")
+
+    for width in (4, 5, 6):
+        if len(num_raw) >= width:
+            tail = num_raw[-width:]
+            candidates.append(f"coE0I{tail}")
+            tail_nz = tail.lstrip("0")
+            if tail_nz:
+                candidates.append(
+                    f"coE0I{tail_nz.zfill(3) if len(tail_nz) < 3 else tail_nz}"
+                )
+
+    seen: set[str] = set()
+    for cand in candidates:
+        if cand in seen:
+            continue
+        seen.add(cand)
+        if cand in target_set:
+            return cand
     return None
 
 
@@ -1065,6 +1117,10 @@ def build_mapping(
             mapping[source_col] = "coEncounter_id"
             continue
         if table == "tbImportAcData":
+            legacy_dest = resolve_ac_legacy_header(source_col, target_set)
+            if legacy_dest:
+                mapping[source_col] = legacy_dest
+                continue
             codes = EPA_CODE_RE.findall(source_col)
             for code in codes:
                 candidate = "co" + code.replace("_", "").upper()
