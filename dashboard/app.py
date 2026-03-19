@@ -9,6 +9,7 @@ import json
 import os
 import re
 import shutil
+import sqlite3
 import subprocess
 import sys
 import uuid
@@ -28,7 +29,7 @@ if str(PIPELINE_DIR) not in sys.path:
     sys.path.insert(0, str(PIPELINE_DIR))
 
 import standardize as std  # type: ignore  # noqa: E402
-from .db_sqlite import load_standardized_csv_into_sqlite  # type: ignore  # noqa: E402
+from .db_sqlite import DB_PATH, load_standardized_csv_into_sqlite  # type: ignore  # noqa: E402
 
 
 SUPPORTED_EXT = {".csv", ".xlsx", ".pdf", ".sql"}
@@ -103,6 +104,34 @@ def normalize_entity_value(value: Any) -> str:
     if text.lower() in {"na", "n/a", "nan", "none", "null", "unknown", "-"}:
         return ""
     return text
+
+
+def quote_sqlite_ident(name: str) -> str:
+    return '"' + str(name).replace('"', '""') + '"'
+
+
+def sqlite_user_tables(conn: sqlite3.Connection) -> list[str]:
+    cur = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
+    )
+    return [str(row[0]) for row in cur.fetchall()]
+
+
+def sqlite_table_info(conn: sqlite3.Connection, table: str) -> dict[str, Any]:
+    ident = quote_sqlite_ident(table)
+    col_rows = conn.execute(f"PRAGMA table_info({ident})").fetchall()
+    columns = [
+        {
+            "name": str(r[1]),
+            "type": str(r[2] or ""),
+            "notnull": bool(r[3]),
+            "default": r[4],
+            "pk": bool(r[5]),
+        }
+        for r in col_rows
+    ]
+    row_count = int(conn.execute(f"SELECT COUNT(*) FROM {ident}").fetchone()[0])
+    return {"table": table, "row_count": row_count, "column_count": len(columns), "columns": columns}
 
 
 def token_value(value: str) -> str:
@@ -1280,9 +1309,126 @@ async def index() -> HTMLResponse:
     return HTMLResponse(html)
 
 
+@app.get("/db", response_class=HTMLResponse)
+async def db_live_page() -> HTMLResponse:
+    html = (REPO_ROOT / "dashboard" / "static" / "db_live.html").read_text(encoding="utf-8")
+    return HTMLResponse(html)
+
+
 @app.get("/api/summary")
 async def api_summary() -> dict[str, Any]:
     return await state.summary()
+
+
+@app.get("/api/db/summary")
+async def api_db_summary() -> dict[str, Any]:
+    exists = DB_PATH.exists()
+    size_bytes = int(DB_PATH.stat().st_size) if exists else 0
+    if not exists:
+        return {
+            "db_path": str(DB_PATH),
+            "exists": False,
+            "size_bytes": 0,
+            "table_count": 0,
+            "total_rows": 0,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+    try:
+        conn = sqlite3.connect(str(DB_PATH))
+        try:
+            tables = sqlite_user_tables(conn)
+            total_rows = 0
+            for t in tables:
+                ident = quote_sqlite_ident(t)
+                total_rows += int(conn.execute(f"SELECT COUNT(*) FROM {ident}").fetchone()[0])
+        finally:
+            conn.close()
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+    return {
+        "db_path": str(DB_PATH),
+        "exists": True,
+        "size_bytes": size_bytes,
+        "table_count": len(tables),
+        "total_rows": total_rows,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@app.get("/api/db/tables")
+async def api_db_tables() -> dict[str, Any]:
+    if not DB_PATH.exists():
+        return {"tables": [], "db_path": str(DB_PATH), "exists": False}
+    try:
+        conn = sqlite3.connect(str(DB_PATH))
+        conn.row_factory = sqlite3.Row
+        try:
+            tables = sqlite_user_tables(conn)
+            items: list[dict[str, Any]] = []
+            for t in tables:
+                info = sqlite_table_info(conn, t)
+                items.append(
+                    {
+                        "table": t,
+                        "row_count": info["row_count"],
+                        "column_count": info["column_count"],
+                    }
+                )
+        finally:
+            conn.close()
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+    return {
+        "exists": True,
+        "db_path": str(DB_PATH),
+        "tables": items,
+        "table_count": len(items),
+    }
+
+
+@app.get("/api/db/table/{table}")
+async def api_db_table(table: str, limit: int = 50) -> dict[str, Any]:
+    if not DB_PATH.exists():
+        raise HTTPException(status_code=404, detail="sqlite database not found")
+    limit = max(1, min(limit, 500))
+    try:
+        conn = sqlite3.connect(str(DB_PATH))
+        conn.row_factory = sqlite3.Row
+        try:
+            tables = set(sqlite_user_tables(conn))
+            if table not in tables:
+                raise HTTPException(status_code=404, detail=f"table not found: {table}")
+            info = sqlite_table_info(conn, table)
+            columns = [c["name"] for c in info["columns"]]
+            ident = quote_sqlite_ident(table)
+            order_col = "id" if "id" in columns else columns[0]
+            order_ident = quote_sqlite_ident(order_col)
+            cur = conn.execute(
+                f"SELECT * FROM {ident} ORDER BY {order_ident} DESC LIMIT ?",
+                (limit,),
+            )
+            fetched = cur.fetchall()
+            rows: list[dict[str, Any]] = []
+            for row in fetched:
+                item: dict[str, Any] = {}
+                for c in columns:
+                    val = row[c]
+                    item[c] = "" if val is None else str(val)
+                rows.append(item)
+        finally:
+            conn.close()
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+    return {
+        "table": table,
+        "row_count": info["row_count"],
+        "column_count": info["column_count"],
+        "columns": columns,
+        "rows": rows,
+        "limit": limit,
+    }
 
 
 @app.get("/api/jobs")
