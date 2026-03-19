@@ -11,6 +11,8 @@ import os
 import re
 import subprocess
 import unicodedata
+import urllib.error
+import urllib.request
 from datetime import date, datetime, time
 from pathlib import Path
 from typing import Any
@@ -23,6 +25,29 @@ CREATE_RE = re.compile(r"^\s*create\s+table\s+([A-Za-z0-9_]+)\s*$", re.IGNORECAS
 EPA_CODE_RE = re.compile(r"E\d+_I_\d+", re.IGNORECASE)
 AC_LEGACY_EPA_RE = re.compile(r"^EPA(\d{3,6})[A-Z0-9_]*$", re.IGNORECASE)
 JSON_BLOCK_RE = re.compile(r"\{.*\}", re.DOTALL)
+
+
+def ollama_generate_text(model: str, prompt: str, timeout_s: int) -> str:
+    """
+    Call Ollama via HTTP (no need for the `ollama` CLI inside the container).
+    """
+    base_url = (os.getenv("OLLAMA_HOST") or "http://127.0.0.1:11434").rstrip("/")
+    url = base_url + "/api/generate"
+    payload = {"model": model, "prompt": prompt, "stream": False}
+    data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    req = urllib.request.Request(
+        url,
+        data=data,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout_s) as resp:
+            raw = resp.read().decode("utf-8", errors="replace")
+        parsed = json.loads(raw)
+        return str(parsed.get("response", "") or "")
+    except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, json.JSONDecodeError):
+        return ""
 PDF_DATE_RE = re.compile(r"Date:\s*(.*?)\s+Shift:", re.IGNORECASE | re.DOTALL)
 PDF_SHIFT_RE = re.compile(
     r"Shift:\s*(.*?)\s+Patient Information", re.IGNORECASE | re.DOTALL
@@ -1118,18 +1143,9 @@ def run_llama_mapping(
         free_targets=free_targets,
         prompt_template=prompt_template,
     )
-    try:
-        result = subprocess.run(
-            ["ollama", "run", model, prompt],
-            check=False,
-            capture_output=True,
-            text=True,
-            timeout=timeout_s,
-        )
-    except (FileNotFoundError, subprocess.TimeoutExpired):
+    text = ollama_generate_text(model=model, prompt=prompt, timeout_s=timeout_s).strip()
+    if not text:
         return {}
-
-    text = (result.stdout or "").strip()
     match = JSON_BLOCK_RE.search(text)
     if not match:
         return {}

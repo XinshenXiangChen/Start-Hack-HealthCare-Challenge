@@ -13,6 +13,8 @@ import sqlite3
 import subprocess
 import sys
 import uuid
+import urllib.error
+import urllib.request
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -94,6 +96,35 @@ DT_FORMATS = [
     "%Y%m%d",
     "%H:%M:%S",
 ]
+
+
+def ollama_generate_text_http(model: str, prompt: str, timeout_s: int) -> str:
+    """
+    Ollama text generation via HTTP API.
+    Used as fallback when the `ollama` CLI isn't available in the container.
+    """
+    base_url = (os.getenv("OLLAMA_HOST") or "http://127.0.0.1:11434").rstrip("/")
+    url = base_url + "/api/generate"
+    payload = {"model": model, "prompt": prompt, "stream": False}
+    data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    req = urllib.request.Request(
+        url,
+        data=data,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout_s) as resp:
+            raw = resp.read().decode("utf-8", errors="replace")
+        parsed = json.loads(raw)
+        return str(parsed.get("response", "") or "")
+    except (
+        urllib.error.URLError,
+        urllib.error.HTTPError,
+        TimeoutError,
+        json.JSONDecodeError,
+    ):
+        return ""
 
 
 def parse_bool_env(name: str, default: bool = False) -> bool:
@@ -384,9 +415,16 @@ def run_llm_entity_link(
             text=True,
             timeout=timeout_s,
         )
-    except (FileNotFoundError, subprocess.TimeoutExpired):
+        out = (proc.stdout or "").strip()
+    except FileNotFoundError:
+        # Container fallback: use Ollama HTTP API instead of CLI.
+        out = ollama_generate_text_http(
+            model=model, prompt=prompt, timeout_s=timeout_s
+        ).strip()
+    except subprocess.TimeoutExpired:
         return None, 0.0
-    out = (proc.stdout or "").strip()
+    if not out:
+        return None, 0.0
     match = JSON_BLOCK_RE.search(out)
     if not match:
         return None, 0.0

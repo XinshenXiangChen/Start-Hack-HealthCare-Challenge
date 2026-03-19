@@ -1,0 +1,45 @@
+version: "2.4"
+
+services:
+  ollama:
+    image: ollama/ollama:latest
+    environment:
+      - OLLAMA_HOST=0.0.0.0:11434
+    volumes:
+      - ollama_data:/root/.ollama
+    restart: unless-stopped
+    command: serve
+
+  ollama_pull:
+    image: ollama/ollama:latest
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+    volumes:
+      - ollama_data:/root/.ollama
+    command: ["pull", "llama3.2:latest"]
+    depends_on:
+      ollama:
+        condition: service_started
+    restart: "no"
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+      - PIPELINE_MODEL=llama3.2:latest
+      - PIPELINE_NO_LLM=0
+      - PIPELINE_LLM_TIMEOUT=200
+      - PIPELINE_AI_LINK_TIMEOUT=200
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - ./runtime:/app/runtime
+    depends_on:
+      ollama_pull:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+volumes:
+  ollama_data:
