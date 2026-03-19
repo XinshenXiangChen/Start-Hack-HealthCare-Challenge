@@ -915,6 +915,20 @@ def truncate_cell(value: Any, max_len: int = 220) -> str:
     return text[: max_len - 1] + "…"
 
 
+def count_nonempty_output_columns(
+    rows: list[dict[str, Any]], target_cols: list[str]
+) -> int:
+    if not rows:
+        return 0
+    count = 0
+    for col in target_cols:
+        for row in rows:
+            if str(row.get(col, "") or "").strip():
+                count += 1
+                break
+    return count
+
+
 def preview_from_records(
     headers: list[str],
     records: list[dict[str, Any]],
@@ -1077,11 +1091,13 @@ async def process_file(path: Path, source: str, job: Job) -> None:
         job.table = table
         job.rows_in = len(records)
         job.rows_out = len(rows)
-        job.mapped_columns = len(mapping)
+        active_output_columns = count_nonempty_output_columns(rows, target_cols)
+        job.mapped_columns = max(len(mapping), active_output_columns)
         job.semantic_extraction_used = semantic_extraction_used
         job.semantic_rows_enriched = semantic_rows_enriched
         job.linked_rows = linked_rows
         job.linked_entities_touched = linked_entities_touched
+        profile["active_output_columns"] = active_output_columns
         job.profile = profile
         job.finished_at = utc_now()
         await state.update_job(job)
