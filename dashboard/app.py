@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import csv
 import contextlib
 import os
 import shutil
@@ -72,6 +73,7 @@ class Job:
     semantic_extraction_used: bool = False
     semantic_rows_enriched: int = 0
     profile: dict[str, Any] = field(default_factory=dict)
+    archived_input_file: str | None = None
     error: str | None = None
 
 
@@ -181,6 +183,59 @@ def purge_runtime_files() -> int:
     return deleted
 
 
+def truncate_cell(value: Any, max_len: int = 220) -> str:
+    text = "" if value is None else str(value)
+    if len(text) <= max_len:
+        return text
+    return text[: max_len - 1] + "…"
+
+
+def preview_from_records(
+    headers: list[str],
+    records: list[dict[str, Any]],
+    max_rows: int,
+    max_cols: int,
+) -> dict[str, Any]:
+    shown_headers = headers[:max_cols]
+    out_rows: list[list[str]] = []
+    for rec in records[:max_rows]:
+        out_rows.append([truncate_cell(rec.get(col, "")) for col in shown_headers])
+    return {
+        "headers": shown_headers,
+        "rows": out_rows,
+        "total_rows": len(records),
+        "total_cols": len(headers),
+        "shown_rows": len(out_rows),
+        "shown_cols": len(shown_headers),
+        "truncated_rows": len(records) > max_rows,
+        "truncated_cols": len(headers) > max_cols,
+    }
+
+
+def load_output_csv_preview(path: Path, max_rows: int, max_cols: int) -> dict[str, Any]:
+    if not path.exists():
+        raise FileNotFoundError(path)
+    enc, delim = std.sniff_text_file(path)
+    with path.open(encoding=enc, newline="") as f:
+        reader = csv.DictReader(f, delimiter=delim)
+        headers = list(reader.fieldnames or [])
+        records: list[dict[str, Any]] = []
+        for row in reader:
+            records.append(row)
+    return preview_from_records(headers, records, max_rows, max_cols)
+
+
+def resolve_job_input_path(job: Job) -> Path | None:
+    candidates: list[Path] = []
+    if job.archived_input_file:
+        candidates.append(Path(job.archived_input_file))
+    candidates.append(Path(job.input_file))
+    for p in candidates:
+        if p.exists():
+            return p
+    return None
+
+
 def detect_table_with_fallback(
     path: Path,
     headers: list[str],
@@ -254,6 +309,7 @@ async def process_file(path: Path, source: str, job: Job) -> None:
         archived_path = ARCHIVE_DIR / archived_name
         try:
             shutil.move(str(path), str(archived_path))
+            job.archived_input_file = str(archived_path)
         except Exception:
             pass
 
@@ -404,6 +460,67 @@ async def api_download(job_id: str) -> FileResponse:
     if not path.exists():
         raise HTTPException(status_code=404, detail="output file missing")
     return FileResponse(path=str(path), filename=path.name, media_type="text/csv")
+
+
+@app.get("/api/download-input/{job_id}")
+async def api_download_input(job_id: str) -> FileResponse:
+    job = state.jobs_by_id.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="job not found")
+    path = resolve_job_input_path(job)
+    if path is None:
+        raise HTTPException(status_code=404, detail="input file missing")
+    return FileResponse(path=str(path), filename=path.name)
+
+
+@app.get("/api/compare/{job_id}")
+async def api_compare(job_id: str, rows: int = 12, cols: int = 12) -> dict[str, Any]:
+    rows = max(1, min(rows, 100))
+    cols = max(1, min(cols, 80))
+    job = state.jobs_by_id.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="job not found")
+
+    before: dict[str, Any] | None = None
+    after: dict[str, Any] | None = None
+    before_error: str | None = None
+    after_error: str | None = None
+
+    input_path = resolve_job_input_path(job)
+    if input_path is None:
+        before_error = "input file missing"
+    else:
+        try:
+            table = job.table or "tbImportAcData"
+            h, recs, profile = std.load_records(input_path, table)
+            before = preview_from_records(h, recs, rows, cols)
+            before["profile"] = profile
+            before["path"] = str(input_path)
+        except Exception as exc:
+            before_error = str(exc)
+
+    if job.output_file:
+        try:
+            out_path = Path(job.output_file)
+            after = load_output_csv_preview(out_path, rows, cols)
+            after["path"] = str(out_path)
+        except Exception as exc:
+            after_error = str(exc)
+    else:
+        after_error = "output not available yet"
+
+    return {
+        "job_id": job.id,
+        "status": job.status,
+        "table": job.table,
+        "source": job.source,
+        "before": before,
+        "after": after,
+        "before_error": before_error,
+        "after_error": after_error,
+        "download_input_url": f"/api/download-input/{job.id}",
+        "download_output_url": f"/api/download/{job.id}" if job.output_file else None,
+    }
 
 
 @app.post("/api/reset")

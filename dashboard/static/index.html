@@ -64,6 +64,12 @@
     button.reset {
       background: #c23d3d;
     }
+    button.mini {
+      padding: 6px 9px;
+      border-radius: 8px;
+      font-size: 12px;
+      background: #1f6e83;
+    }
     .meta { color: var(--ink-soft); font-size: 13px; margin-top: 10px; }
     table { width: 100%; border-collapse: collapse; background: var(--surface); border-radius: 12px; overflow: hidden; }
     th, td { padding: 10px 12px; border-bottom: 1px solid var(--line); text-align: left; font-size: 14px; vertical-align: top; }
@@ -75,11 +81,40 @@
     .chip.queued { background: #e9eef3; color: #466178; }
     .small { color: var(--ink-soft); font-size: 12px; }
     a.dl { color: var(--accent); text-decoration: none; font-weight: 700; }
+    .modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(16, 27, 34, 0.55);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 18px;
+      z-index: 40;
+    }
+    .modal.open { display: flex; }
+    .modal-card {
+      width: min(1200px, 96vw);
+      max-height: 92vh;
+      overflow: auto;
+      background: #fff;
+      border-radius: 14px;
+      border: 1px solid var(--line);
+      box-shadow: 0 18px 40px rgba(0,0,0,0.18);
+      padding: 14px;
+    }
+    .modal-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .subpanel { border: 1px solid var(--line); border-radius: 12px; padding: 10px; overflow: auto; }
+    .subpanel h3 { margin: 0 0 8px; font-size: 15px; }
+    .subtable { width: 100%; border-collapse: collapse; }
+    .subtable th, .subtable td { border: 1px solid var(--line); padding: 6px; font-size: 12px; vertical-align: top; }
+    .muted { color: #5f6f78; font-size: 12px; }
     @media (max-width: 980px) {
       .hero { grid-template-columns: 1fr; }
       .kpis { grid-template-columns: repeat(2, 1fr); }
       th:nth-child(3), td:nth-child(3),
-      th:nth-child(8), td:nth-child(8) { display: none; }
+      th:nth-child(9), td:nth-child(9) { display: none; }
+      .grid2 { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -124,6 +159,7 @@
             <th>Rows</th>
             <th>Mapped</th>
             <th>Semantic</th>
+            <th>View</th>
             <th>Output</th>
             <th>Error</th>
           </tr>
@@ -131,6 +167,30 @@
         <tbody id="jobs"></tbody>
       </table>
     </section>
+  </div>
+
+  <div id="compare-modal" class="modal" aria-hidden="true">
+    <div class="modal-card">
+      <div class="modal-head">
+        <div>
+          <strong>Before / After Preview</strong>
+          <div id="cmp-meta" class="muted"></div>
+        </div>
+        <button id="close-modal" type="button" class="reset">Close</button>
+      </div>
+      <div class="grid2" style="margin-top:10px;">
+        <section class="subpanel">
+          <h3>Before (Source)</h3>
+          <div id="cmp-before-meta" class="muted"></div>
+          <div id="cmp-before"></div>
+        </section>
+        <section class="subpanel">
+          <h3>After (Standardized)</h3>
+          <div id="cmp-after-meta" class="muted"></div>
+          <div id="cmp-after"></div>
+        </section>
+      </div>
+    </div>
   </div>
 
   <script>
@@ -143,6 +203,12 @@
     const kRun = document.getElementById("k-running");
     const kOk = document.getElementById("k-ok");
     const kErr = document.getElementById("k-err");
+    const compareModal = document.getElementById("compare-modal");
+    const cmpMeta = document.getElementById("cmp-meta");
+    const cmpBefore = document.getElementById("cmp-before");
+    const cmpAfter = document.getElementById("cmp-after");
+    const cmpBeforeMeta = document.getElementById("cmp-before-meta");
+    const cmpAfterMeta = document.getElementById("cmp-after-meta");
 
     function esc(s) {
       return String(s ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
@@ -151,6 +217,41 @@
     function chip(status) {
       const c = status === "ok" ? "ok" : status === "error" ? "error" : status === "queued" ? "queued" : "running";
       return `<span class="chip ${c}">${esc(status)}</span>`;
+    }
+
+    function renderPreview(pre) {
+      if (!pre) return "<div class='muted'>No preview available</div>";
+      const head = (pre.headers || []).map(h => `<th>${esc(h)}</th>`).join("");
+      const rows = (pre.rows || []).map(r => `<tr>${r.map(v => `<td>${esc(v)}</td>`).join("")}</tr>`).join("");
+      return `<table class="subtable"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table>`;
+    }
+
+    async function openCompare(jobId) {
+      cmpMeta.textContent = "Loading...";
+      cmpBefore.innerHTML = "";
+      cmpAfter.innerHTML = "";
+      cmpBeforeMeta.textContent = "";
+      cmpAfterMeta.textContent = "";
+      compareModal.classList.add("open");
+      compareModal.setAttribute("aria-hidden", "false");
+      const res = await fetch(`/api/compare/${jobId}?rows=12&cols=12`);
+      const data = await res.json();
+      if (!res.ok) {
+        cmpMeta.textContent = `Failed: ${data.detail || "unknown error"}`;
+        return;
+      }
+      cmpMeta.innerHTML =
+        `job <b>${esc(data.job_id)}</b> | status <b>${esc(data.status)}</b> | table <b>${esc(data.table || "-")}</b> | ` +
+        `<a class="dl" href="${esc(data.download_input_url)}">download input</a> ` +
+        (data.download_output_url ? `| <a class="dl" href="${esc(data.download_output_url)}">download output</a>` : "");
+      cmpBeforeMeta.textContent = data.before_error
+        ? `Before error: ${data.before_error}`
+        : `rows ${data.before.total_rows}, cols ${data.before.total_cols}${data.before.truncated_rows || data.before.truncated_cols ? " (preview truncated)" : ""}`;
+      cmpAfterMeta.textContent = data.after_error
+        ? `After error: ${data.after_error}`
+        : `rows ${data.after.total_rows}, cols ${data.after.total_cols}${data.after.truncated_rows || data.after.truncated_cols ? " (preview truncated)" : ""}`;
+      cmpBefore.innerHTML = renderPreview(data.before);
+      cmpAfter.innerHTML = renderPreview(data.after);
     }
 
     async function refresh() {
@@ -173,6 +274,7 @@
       jobsEl.innerHTML = (data.jobs || []).map(j => {
         const rows = (j.rows_in ?? "-") + "/" + (j.rows_out ?? "-");
         const sem = j.semantic_extraction_used ? `yes (${j.semantic_rows_enriched})` : "no";
+        const view = `<button class="mini" type="button" onclick="openCompare('${j.id}')">visualize</button>`;
         const out = j.output_file ? `<a class="dl" href="/api/download/${j.id}">download</a>` : "-";
         return `<tr>
           <td>${chip(j.status)}</td>
@@ -181,6 +283,7 @@
           <td>${esc(rows)}</td>
           <td>${esc(j.mapped_columns ?? "-")}</td>
           <td>${esc(sem)}</td>
+          <td>${view}</td>
           <td>${out}</td>
           <td class="small">${esc(j.error || "")}</td>
         </tr>`;
@@ -215,6 +318,18 @@
         : `Reset failed: ${data.detail || "unknown error"}`;
       await refresh();
     });
+
+    document.getElementById("close-modal").addEventListener("click", () => {
+      compareModal.classList.remove("open");
+      compareModal.setAttribute("aria-hidden", "true");
+    });
+    compareModal.addEventListener("click", (e) => {
+      if (e.target === compareModal) {
+        compareModal.classList.remove("open");
+        compareModal.setAttribute("aria-hidden", "true");
+      }
+    });
+    window.openCompare = openCompare;
 
     refresh();
     setInterval(refresh, 1200);
