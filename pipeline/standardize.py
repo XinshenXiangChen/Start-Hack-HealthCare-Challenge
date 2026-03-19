@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import math
 import re
 import subprocess
 from datetime import date, datetime, time
@@ -338,6 +339,10 @@ def sniff_text_file(path: Path) -> tuple[str, str]:
 
 def cell_to_str(value: Any) -> str:
     if value is None:
+        return ""
+    # Excel files saved from pandas often contain IEEE NaN floats.
+    # Treat them as missing/empty to avoid writing literal "nan" everywhere.
+    if isinstance(value, float) and math.isnan(value):
         return ""
     if isinstance(value, datetime):
         return value.isoformat(sep=" ")
