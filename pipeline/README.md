@@ -2,6 +2,12 @@
 
 This folder contains the core standardization and evaluation utilities.
 
+Live dashboard app is under `dashboard/` at repo root and can be launched with:
+
+```bash
+python pipeline.py dashboard
+```
+
 ## Components
 
 - `standardize.py`: normalize mixed CSV/XLSX/PDF/SQL data into SQL target-table CSVs

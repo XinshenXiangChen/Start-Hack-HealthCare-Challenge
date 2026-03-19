@@ -64,3 +64,16 @@ python pipeline.py eval \
   --out-md pipeline/out/eval.md \
   --model llama3.2:latest
 ```
+
+Run live dashboard:
+
+```bash
+python pipeline.py dashboard --host 0.0.0.0 --port 8000
+```
+
+Dashboard behavior:
+
+- Watches `runtime/incoming` for new files.
+- Standardizes each file to `runtime/standardized`.
+- Moves processed inputs to `runtime/processed`.
+- Provides upload + status UI at `http://localhost:8000`.

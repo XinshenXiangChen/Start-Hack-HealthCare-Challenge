@@ -100,6 +100,11 @@ def main() -> None:
     )
     eval_cmd.add_argument("--no-llm", action="store_true")
 
+    dashboard_cmd = subparsers.add_parser("dashboard", help="Run live ingestion dashboard.")
+    dashboard_cmd.add_argument("--host", default="0.0.0.0")
+    dashboard_cmd.add_argument("--port", type=int, default=8000)
+    dashboard_cmd.add_argument("--reload", action="store_true")
+
     args = parser.parse_args()
 
     if args.command == "schema":
@@ -161,6 +166,22 @@ def main() -> None:
             cmd_args.append("--no-llm")
         rc = run_python(PIPELINE_DIR / "eval.py", cmd_args)
         raise SystemExit(rc)
+
+    if args.command == "dashboard":
+        cmd = [
+            sys.executable,
+            "-m",
+            "uvicorn",
+            "dashboard.app:app",
+            "--host",
+            args.host,
+            "--port",
+            str(args.port),
+        ]
+        if args.reload:
+            cmd.append("--reload")
+        proc = subprocess.run(cmd, cwd=REPO_ROOT)
+        raise SystemExit(proc.returncode)
 
 
 if __name__ == "__main__":
