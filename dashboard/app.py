@@ -480,6 +480,13 @@ def safe_name(name: str) -> str:
     return Path(name).name.replace(" ", "_")
 
 
+def readable_input_name(name: str) -> str:
+    text = Path(name).name
+    text = re.sub(r"^\d{8}_\d{6}_", "", text)
+    text = re.sub(r"^\d{8}_\d{6}_rerun_[0-9a-f]{12}_", "", text)
+    return text
+
+
 def signature(path: Path) -> str:
     st = path.stat()
     return f"{path.resolve()}::{st.st_size}::{st.st_mtime_ns}"
@@ -492,6 +499,7 @@ class Job:
     source: str
     input_file: str
     created_at: str
+    display_name: str | None = None
     started_at: str | None = None
     finished_at: str | None = None
     output_file: str | None = None
@@ -1433,7 +1441,9 @@ async def process_file(path: Path, source: str, job: Job) -> None:
         await state.update_job(job)
 
 
-async def enqueue_processing(path: Path, source: str) -> tuple[bool, str | None]:
+async def enqueue_processing(
+    path: Path, source: str, display_name: str | None = None
+) -> tuple[bool, str | None]:
     try:
         sig = signature(path)
     except FileNotFoundError:
@@ -1450,6 +1460,7 @@ async def enqueue_processing(path: Path, source: str) -> tuple[bool, str | None]
         status="queued",
         source=source,
         input_file=str(path),
+        display_name=display_name or readable_input_name(path.name),
         created_at=utc_now(),
     )
     await state.add_job(job)
@@ -1740,11 +1751,18 @@ async def api_rerun(job_id: str) -> dict[str, Any]:
 
     ensure_dirs()
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    rerun_name = f"{stamp}_rerun_{job.id}_{safe_name(src_path.name)}"
+    base_label = job.display_name or readable_input_name(src_path.name)
+    base_path = Path(base_label)
+    base_stem = safe_name(base_path.stem or src_path.stem)
+    rerun_name = f"{base_stem}__rerun_{stamp}{src_path.suffix.lower()}"
     dst = INPUT_DIR / rerun_name
     shutil.copy2(src_path, dst)
 
-    scheduled, new_job_id = await enqueue_processing(dst, f"rerun:{job_id}")
+    scheduled, new_job_id = await enqueue_processing(
+        dst,
+        f"rerun:{job_id}",
+        display_name=f"{base_label} (rerun)",
+    )
     return {
         "status": "accepted",
         "source_job_id": job_id,

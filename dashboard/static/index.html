@@ -292,14 +292,10 @@
       <section class="subpanel" style="margin-top:10px;">
         <h3>Summary</h3>
         <div id="quality-summary"></div>
-        <label class="small" style="display:inline-flex;gap:6px;align-items:center;margin-top:8px;">
-          <input id="quality-only-anomalies" type="checkbox" checked />
-          show only columns with anomalies
-        </label>
       </section>
       <div class="grid2" style="margin-top:10px;">
         <section class="subpanel">
-          <h3>Missing Required Fields</h3>
+          <h3>Incomplete Columns</h3>
           <div id="quality-missing"></div>
         </section>
         <section class="subpanel">
@@ -440,7 +436,6 @@
     const qualityMissing = document.getElementById("quality-missing");
     const qualityTypes = document.getElementById("quality-types");
     const qualityNan = document.getElementById("quality-nan");
-    const qualityOnlyAnomalies = document.getElementById("quality-only-anomalies");
     const entityModal = document.getElementById("entity-modal");
     const entityMeta = document.getElementById("entity-meta");
     const entityKeysEl = document.getElementById("entity-keys");
@@ -464,13 +459,7 @@
       const invalid = Array.isArray(q.type_invalid_examples) ? q.type_invalid_examples.length : 0;
       const nan = Number(q.nan_values || 0);
       const hasIssues = missing > 0 || invalid > 0 || nan > 0;
-      const summary = `missing ${missing} • type mismatches ${invalid} • nan ${nan}`;
-      return `
-        <div>
-          <span class="chip ${hasIssues ? "error" : "ok"}">${hasIssues ? "issues" : "ok"}</span>
-          <div class="small">${summary}</div>
-        </div>
-      `;
+      return `<span class="chip ${hasIssues ? "error" : "ok"}">${hasIssues ? "issues" : "ok"}</span>`;
     }
 
     function formatCellValue(value) {
@@ -505,30 +494,38 @@
       `;
     }
 
-    function renderMissingTable(q, onlyAnomalies = true) {
+    function renderMissingTable(q) {
       const cols = q?.missing_by_column || q?.required_missing_by_column || {};
-      let keys = Object.keys(cols || {});
-      if (onlyAnomalies) {
-        keys = keys.filter(k => {
-          const info = cols[k] || {};
-          const missing = Number(info.missing || 0);
-          const total = Number(info.total || 0);
-          return missing > 0 && total > 0;
-        });
-      }
+      const keys = Object.keys(cols || {}).filter(k => {
+        const info = cols[k] || {};
+        const missing = Number(info.missing || 0);
+        const total = Number(info.total || 0);
+        const present = Number(info.present || 0);
+        const completion = total > 0 ? (present / total) * 100 : 100;
+        return total > 0 && completion < 100;
+      }).sort((a, b) => {
+        const aInfo = cols[a] || {};
+        const bInfo = cols[b] || {};
+        const aTotal = Number(aInfo.total || 0);
+        const bTotal = Number(bInfo.total || 0);
+        const aPresent = Number(aInfo.present || 0);
+        const bPresent = Number(bInfo.present || 0);
+        const aCompletion = aTotal > 0 ? (aPresent / aTotal) * 100 : 100;
+        const bCompletion = bTotal > 0 ? (bPresent / bTotal) * 100 : 100;
+        return aCompletion - bCompletion;
+      });
       if (!keys.length) {
-        return onlyAnomalies
-          ? "<div class='muted'>No missing values detected in this dataset.</div>"
-          : "<div class='muted'>No required columns or no rows loaded.</div>";
+        return "<div class='muted'>No missing values detected in this dataset.</div>";
       }
       const rows = keys.map(k => {
         const info = cols[k] || {};
         const missing = Number(info.missing || 0);
+        const present = Number(info.present || 0);
         const total = Number(info.total || 0);
-        const pct = total ? Math.round((missing / total) * 100) : 0;
-        return `<tr><td>${esc(k)}</td><td>${missing}</td><td>${total}</td><td>${pct}%</td></tr>`;
+        const completion = total ? Math.round((present / total) * 100) : 100;
+        return `<tr><td>${esc(k)}</td><td>${missing}</td><td>${total}</td><td>${completion}%</td></tr>`;
       }).join("");
-      return `<table class="subtable"><thead><tr><th>Column</th><th>Missing</th><th>Total</th><th>%</th></tr></thead><tbody>${rows}</tbody></table>`;
+      return `<table class="subtable"><thead><tr><th>Column</th><th>Missing</th><th>Total</th><th>Completed</th></tr></thead><tbody>${rows}</tbody></table>`;
     }
 
     function renderTypeInvalid(q) {
@@ -672,8 +669,7 @@
     let lastQualityPayload = null;
     function refreshQualityTables() {
       const q = lastQualityPayload;
-      const only = !!qualityOnlyAnomalies?.checked;
-      qualityMissing.innerHTML = renderMissingTable(q, only);
+      qualityMissing.innerHTML = renderMissingTable(q);
       qualityTypes.innerHTML = renderTypeInvalid(q);
       qualityNan.innerHTML = renderNanSamples(q);
     }
@@ -765,7 +761,7 @@
         const out = j.output_file ? `<a class="dl" href="/api/download/${j.id}">download</a>` : "-";
         return `<tr>
           <td>${chip(j.status)}</td>
-          <td>${esc(basename(j.input_file))}<div class="small">${esc(j.created_at)}</div></td>
+          <td>${esc(j.display_name || basename(j.input_file))}<div class="small">${esc(j.created_at)}</div></td>
           <td>${esc(j.table || "-")}</td>
           <td>${esc(rows)}</td>
           <td>${qualityCell(j)}</td>
@@ -922,9 +918,6 @@
         qualityModal.classList.remove("open");
         qualityModal.setAttribute("aria-hidden", "true");
       }
-    });
-    qualityOnlyAnomalies?.addEventListener("change", () => {
-      refreshQualityTables();
     });
     document.getElementById("close-entity-modal").addEventListener("click", () => {
       entityModal.classList.remove("open");
